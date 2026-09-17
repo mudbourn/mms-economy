@@ -65,6 +65,16 @@ public final class Depot {
         return distance <= (double) range * range;
     }
 
+    // A cylinder check: within horizontalRange on the ground plane and verticalRange up or down, so a buried depot still counts.
+    public static boolean withinReach(ServerPlayerEntity player, BlockPos anchor,
+                                      int horizontalRange, int verticalRange) {
+        double dx = player.getX() - (anchor.getX() + 0.5);
+        double dz = player.getZ() - (anchor.getZ() + 0.5);
+        double dy = Math.abs(player.getY() - (anchor.getY() + 0.5));
+        return dx * dx + dz * dz <= (double) horizontalRange * horizontalRange
+            && dy <= verticalRange + 0.5;
+    }
+
     // The four barrel inventories of the depot anchored at the given corner, or an empty list when incomplete.
     public static List<Inventory> barrels(ServerWorld world, BlockPos anchor) {
         BlockPos[] positions = completePlane(world, anchor);

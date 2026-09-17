@@ -317,7 +317,8 @@ public final class EconomyNetworking {
         }
 
         BlockPos depot = Depot.detectNear(player, depotRange);
-        boolean nearDepot = depot != null && !market.depotClaimedByOther(depot, player.getUuid());
+        boolean nearDepot = (depot != null && !market.depotClaimedByOther(depot, player.getUuid()))
+            || Marketplace.ownsReachableDepot(player);
 
         List<BuyRow> serverBuy = new ArrayList<>();
         for (Map.Entry<String, Long> entry : ServerBuyList.entries().entrySet()) {

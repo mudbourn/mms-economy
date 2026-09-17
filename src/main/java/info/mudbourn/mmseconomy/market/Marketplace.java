@@ -171,12 +171,14 @@ public final class Marketplace {
             + " (tax " + Currency.format(settlement.tax()) + ")."), false);
     }
 
-    // A buyer may reach a listing when within shopOwnerRange of its online owner or shopMarketRange of its depot.
+    // A buyer may reach a listing within shopOwnerRange of its online owner, or within shopMarketRange
+    // of its depot with the depot up to shopVerticalRange above or below, so it can be hidden underground.
     public static boolean canReach(ServerPlayerEntity buyer, ShopListing listing, MinecraftServer server) {
         if (!listing.dimension().equals(buyer.getEntityWorld().getRegistryKey().getValue().toString())) {
             return false;
         }
-        if (Depot.inRange(buyer, listing.depot(), MmsEconomy.config().shopMarketRange)) {
+        if (Depot.withinReach(buyer, listing.depot(),
+            MmsEconomy.config().shopMarketRange, MmsEconomy.config().shopVerticalRange)) {
             return true;
         }
         ServerPlayerEntity owner = server.getPlayerManager().getPlayer(listing.owner());
@@ -188,8 +190,23 @@ public final class Marketplace {
         return distance <= (double) ownerRange * ownerRange;
     }
 
-    // True when the player stands at a depot that is theirs or unclaimed, not one another player owns.
+    // A shop owner reaches their own depot within shopMarketRange horizontally and shopVerticalRange up or down.
+    public static boolean ownsReachableDepot(ServerPlayerEntity player) {
+        ServerWorld world = player.getEntityWorld();
+        String dimension = world.getRegistryKey().getValue().toString();
+        int horizontal = MmsEconomy.config().shopMarketRange;
+        int vertical = MmsEconomy.config().shopVerticalRange;
+        return Market.get(world.getServer()).all().stream().anyMatch(listing ->
+            listing.owner().equals(player.getUuid())
+                && listing.dimension().equals(dimension)
+                && Depot.withinReach(player, listing.depot(), horizontal, vertical));
+    }
+
+    // True when the player is at their own reachable shop or standing at a depot that is theirs or unclaimed.
     private static boolean atOwnDepot(ServerPlayerEntity player) {
+        if (ownsReachableDepot(player)) {
+            return true;
+        }
         BlockPos depot = Depot.detectNear(player, MmsEconomy.config().depotRange);
         if (depot == null) {
             return false;

@@ -54,6 +54,9 @@ public final class EconomyConfig {
     // Blocks a buyer may be from a shop's market depot to buy from it.
     public int shopMarketRange = 15;
 
+    // Vertical blocks a depot may sit above or below the reaching player, so it can be hidden underground.
+    public int shopVerticalRange = 5;
+
     // Flat Pice sink charged once when a player first claims a shop depot.
     public long shopSetupFeePice = 1500L;
 
@@ -93,6 +96,7 @@ public final class EconomyConfig {
         "depotRange",
         "shopOwnerRange",
         "shopMarketRange",
+        "shopVerticalRange",
         "shopSetupFeePice",
         "taxEnabled",
         "taxPayBps",
@@ -119,6 +123,7 @@ public final class EconomyConfig {
                 case "depotRange" -> this.depotRange = Integer.parseInt(value);
                 case "shopOwnerRange" -> this.shopOwnerRange = Integer.parseInt(value);
                 case "shopMarketRange" -> this.shopMarketRange = Integer.parseInt(value);
+                case "shopVerticalRange" -> this.shopVerticalRange = Integer.parseInt(value);
                 case "shopSetupFeePice" -> this.shopSetupFeePice = Long.parseLong(value);
                 case "taxEnabled" -> this.taxEnabled = Boolean.parseBoolean(value);
                 case "taxPayBps" -> this.taxPayBps = Integer.parseInt(value);
@@ -153,6 +158,7 @@ public final class EconomyConfig {
             + ", depotRange=" + depotRange
             + ", shopOwnerRange=" + shopOwnerRange
             + ", shopMarketRange=" + shopMarketRange
+            + ", shopVerticalRange=" + shopVerticalRange
             + ", shopSetupFeePice=" + shopSetupFeePice
             + ", taxEnabled=" + taxEnabled
             + ", taxPayBps=" + taxPayBps
