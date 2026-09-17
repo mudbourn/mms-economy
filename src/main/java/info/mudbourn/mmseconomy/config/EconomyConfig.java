@@ -66,6 +66,12 @@ public final class EconomyConfig {
     // Entries kept per history category before the oldest is dropped.
     public int historyPerCategory = 250;
 
+    // Percent interest paid on a stored bank balance each interest tick.
+    public int bankInterestPercent = 2;
+
+    // In-game days between bank interest ticks.
+    public int bankInterestDays = 30;
+
     // Every settable key, for command autocomplete and validation.
     public static final java.util.List<String> KEYS = java.util.List.of(
         "maxBalance",
@@ -84,7 +90,9 @@ public final class EconomyConfig {
         "taxPayBps",
         "taxDealBps",
         "taxPurchaseBps",
-        "historyPerCategory");
+        "historyPerCategory",
+        "bankInterestPercent",
+        "bankInterestDays");
 
     // Applies a value to a named field, returning false for an unknown key or unparseable value, and saves on success.
     public boolean set(String key, String value) {
@@ -107,6 +115,8 @@ public final class EconomyConfig {
                 case "taxDealBps" -> this.taxDealBps = Integer.parseInt(value);
                 case "taxPurchaseBps" -> this.taxPurchaseBps = Integer.parseInt(value);
                 case "historyPerCategory" -> this.historyPerCategory = Integer.parseInt(value);
+                case "bankInterestPercent" -> this.bankInterestPercent = Integer.parseInt(value);
+                case "bankInterestDays" -> this.bankInterestDays = Integer.parseInt(value);
                 default -> {
                     return false;
                 }
@@ -136,7 +146,9 @@ public final class EconomyConfig {
             + ", taxPayBps=" + taxPayBps
             + ", taxDealBps=" + taxDealBps
             + ", taxPurchaseBps=" + taxPurchaseBps
-            + ", historyPerCategory=" + historyPerCategory;
+            + ", historyPerCategory=" + historyPerCategory
+            + ", bankInterestPercent=" + bankInterestPercent
+            + ", bankInterestDays=" + bankInterestDays;
     }
 
     public static EconomyConfig load() {

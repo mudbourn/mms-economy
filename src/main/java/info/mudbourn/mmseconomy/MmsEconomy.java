@@ -51,6 +51,8 @@ public class MmsEconomy implements ModInitializer {
 
         ServerTickEvents.END_SERVER_TICK.register(DealManager::tickAll);
 
+        ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.BankInterest::tick);
+
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
             BankOccupancy.release(handler.player.getEntityWorld(), handler.player));
 

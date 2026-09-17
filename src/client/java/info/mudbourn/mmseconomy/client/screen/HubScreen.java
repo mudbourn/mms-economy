@@ -10,7 +10,9 @@ import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
 
 import java.util.List;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.item.ItemStack;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -234,9 +236,9 @@ public final class HubScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(this.textRenderer,
-            "Balance: " + Currency.format(data.balance()), this.width / 2, 56, 0xFFE066);
+            "Balance: " + Currency.format(data.balance()), this.width / 2, 56, 0xFFFFE066);
 
         switch (tab) {
             case BANK -> renderBank(context);
@@ -250,18 +252,18 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         List<HistoryEntry> rows = historyRows();
         if (!historyLoaded) {
-            context.drawTextWithShadow(this.textRenderer, "Loading...", left, 100, 0xAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, "Loading...", left, 100, 0xFFAAAAAA);
             return;
         }
         if (rows.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No entries.", left, 100, 0xAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, "No entries.", left, 100, 0xFFAAAAAA);
             return;
         }
         int top = 100;
         int visible = Math.min(ROWS_VISIBLE + 1, rows.size() - scroll);
         for (int i = 0; i < visible; i++) {
             HistoryEntry entry = rows.get(i + scroll);
-            context.drawTextWithShadow(this.textRenderer, historyRow(entry), left, top + i * 14, 0xE0E0E0);
+            context.drawTextWithShadow(this.textRenderer, historyRow(entry), left, top + i * 14, 0xFFE0E0E0);
         }
     }
 
@@ -284,36 +286,40 @@ public final class HubScreen extends Screen {
 
     private void renderBank(DrawContext context) {
         int centerX = this.width / 2;
-        context.drawCenteredTextWithShadow(this.textRenderer,
-            "Balance: " + Currency.format(data.balance()), centerX, 60, 0xFFD700);
+        ItemStack held = MinecraftClient.getInstance().player.getMainHandStack();
+        String heldText = held.isEmpty()
+            ? "empty"
+            : held.getName().getString() + " x" + held.getCount();
+        context.drawItem(held, centerX - 90, 68);
+        context.drawTextWithShadow(this.textRenderer, "In hand: " + heldText, centerX - 70, 72, 0xFFFFFFFF);
         if (!data.hasBank()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
-                "Stand near a bank block to deposit or withdraw.", centerX, 78, 0xAAAAAA);
+                "Stand near a bank block to deposit or withdraw.", centerX, 150, 0xFFAAAAAA);
         } else if (data.bankOccupiedByOther()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
-                "This bank is occupied. Try another.", centerX, 78, 0xFF8080);
+                "This bank is occupied. Try another.", centerX, 150, 0xFFFF8080);
         }
     }
 
     private void renderMarket(DrawContext context) {
         int left = this.width / 2 - 170;
         if (data.listings().isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No listings yet.", left, LIST_TOP, 0xAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, "No listings yet.", left, LIST_TOP, 0xFFAAAAAA);
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.listings().size(); i++) {
             MarketRow row = data.listings().get(i + scroll);
             int y = LIST_TOP + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
-                row.name() + "  " + Currency.format(row.price()), left, y, 0xFFFFFF);
+                row.name() + "  " + Currency.format(row.price()), left, y, 0xFFFFFFFF);
             String detail = row.buyable()
                 ? "by " + row.owner()
                 : "by " + row.owner() + " @ " + row.x() + "," + row.y() + "," + row.z();
             context.drawTextWithShadow(this.textRenderer, detail, left, y + 10,
-                row.buyable() ? 0x88CC88 : 0xAAAAAA);
+                row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
         }
 
         int listY = this.height - 68;
-        context.drawTextWithShadow(this.textRenderer, "Sell to server:", this.width / 2 - 170, listY, 0xFFE066);
+        context.drawTextWithShadow(this.textRenderer, "Sell to server:", this.width / 2 - 170, listY, 0xFFFFE066);
         StringBuilder buyables = new StringBuilder();
         for (EconomyNetworking.BuyRow row : data.serverBuy()) {
             if (buyables.length() > 0) {
@@ -322,29 +328,29 @@ public final class HubScreen extends Screen {
             buyables.append(row.name()).append(" ").append(Currency.format(row.price()));
         }
         String summary = buyables.length() == 0 ? "nothing accepted" : buyables.toString();
-        context.drawTextWithShadow(this.textRenderer, summary, this.width / 2 - 60, listY, 0xAAAAAA);
+        context.drawTextWithShadow(this.textRenderer, summary, this.width / 2 - 60, listY, 0xFFAAAAAA);
     }
 
     private void renderShops(DrawContext context) {
         int left = this.width / 2 - 170;
         if (!data.nearDepot()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
-                "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xAAAAAA);
+                "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xFFAAAAAA);
         } else {
             context.drawTextWithShadow(this.textRenderer,
-                "Hold an item and set a price to list it.", left, 118, 0xAAAAAA);
+                "Hold an item and set a price to list it.", left, 118, 0xFFAAAAAA);
         }
 
         int top = 128;
         if (data.myListings().isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "You have no listings.", left, top, 0xAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, "You have no listings.", left, top, 0xFFAAAAAA);
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
             ShopRow row = data.myListings().get(i + scroll);
             int y = top + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
-                left, y + 2, 0xFFFFFF);
+                left, y + 2, 0xFFFFFFFF);
         }
     }
 
