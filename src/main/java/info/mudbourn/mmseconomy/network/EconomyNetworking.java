@@ -305,9 +305,8 @@ public final class EconomyNetworking {
             String name = Marketplace.displayName(listing.item());
             boolean sameDim = listing.dimension().equals(dimension);
             boolean reachable = Marketplace.canReach(player, listing, server);
-            boolean ownerOnline = server.getPlayerManager().getPlayer(listing.owner()) != null;
             int stock = sameDim ? Marketplace.stock(world, listing.depot(), listing.item()) : 0;
-            boolean buyable = reachable && ownerOnline && stock > 0
+            boolean buyable = reachable && stock > 0
                 && !listing.owner().equals(player.getUuid());
             listings.add(new MarketRow(i, name, listing.price(), listing.ownerName(),
                 listing.depot().getX(), listing.depot().getY(), listing.depot().getZ(), buyable));

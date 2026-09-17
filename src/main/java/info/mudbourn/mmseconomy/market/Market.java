@@ -64,4 +64,13 @@ public final class Market extends PersistentState {
             markDirty();
         }
     }
+
+    // Drops every listing matching the predicate, returning how many were removed.
+    public int removeIf(java.util.function.Predicate<ShopListing> predicate) {
+        int before = listings.size();
+        if (listings.removeIf(predicate)) {
+            markDirty();
+        }
+        return before - listings.size();
+    }
 }

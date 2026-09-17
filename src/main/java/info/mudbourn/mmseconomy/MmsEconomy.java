@@ -12,6 +12,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import info.mudbourn.mmseconomy.deal.DealManager;
 import info.mudbourn.mmseconomy.market.Marketplace;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -56,6 +57,22 @@ public class MmsEconomy implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
             BankOccupancy.release(handler.player.getEntityWorld(), handler.player));
 
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayerEntity player = handler.player;
+            info.mudbourn.mmseconomy.economy.PendingPayouts payouts =
+                info.mudbourn.mmseconomy.economy.PendingPayouts.get(server);
+            long owed = payouts.claim(player.getUuid());
+            for (info.mudbourn.mmseconomy.history.HistoryEntry entry : payouts.claimHistory(player.getUuid())) {
+                info.mudbourn.mmseconomy.history.History.log(player, entry);
+            }
+            if (owed <= 0) {
+                return;
+            }
+            info.mudbourn.mmseconomy.economy.Wallet.deposit(player, owed);
+            player.sendMessage(Text.literal("Shop sales while away: +"
+                + info.mudbourn.mmseconomy.economy.Currency.format(owed)), false);
+        });
+
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
             if (world instanceof ServerWorld serverWorld
                 && player instanceof ServerPlayerEntity serverPlayer
@@ -67,6 +84,25 @@ public class MmsEconomy implements ModInitializer {
                 }
             }
             return ActionResult.PASS;
+        });
+
+        PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
+            if (!(world instanceof ServerWorld)
+                || !(player instanceof ServerPlayerEntity serverPlayer)
+                || !state.isOf(Blocks.BARREL)) {
+                return true;
+            }
+            String owner = Marketplace.protectedOwner(serverPlayer, pos);
+            if (owner != null) {
+                serverPlayer.sendMessage(Text.literal("This depot belongs to " + owner + "."), true);
+                return false;
+            }
+            int closed = Marketplace.removeShopAtBrokenBarrel(serverPlayer, pos);
+            if (closed > 0) {
+                serverPlayer.sendMessage(Text.literal("Breaking your depot closed "
+                    + closed + (closed == 1 ? " listing." : " listings.")), false);
+            }
+            return true;
         });
 
         LOGGER.info("mms-economy initialized");

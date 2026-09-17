@@ -13,13 +13,13 @@ public final class Currency {
         return ratio > 0 ? ratio : 100;
     }
 
-    // A compact readout such as "12.34 Colt".
+    // A compact readout such as "C12.34".
     public static String format(long pice) {
         int ratio = ratio();
         long colt = pice / ratio;
         long sub = pice % ratio;
         int width = Integer.toString(ratio - 1).length();
-        return colt + "." + padLeft(sub, width) + " Colt";
+        return "C" + colt + "." + padLeft(sub, width);
     }
 
     // A spelled-out readout such as "12 Colt 34 Pice".

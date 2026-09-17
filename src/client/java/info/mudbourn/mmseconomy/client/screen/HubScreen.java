@@ -36,6 +36,8 @@ public final class HubScreen extends Screen {
 
     private static final int LIST_TOP = 78;
 
+    private static final int SHOP_LIST_TOP = 140;
+
     private static final int ROW_HEIGHT = 22;
 
     private static final int ROWS_VISIBLE = 6;
@@ -195,16 +197,6 @@ public final class HubScreen extends Screen {
         withdraw.active = usable;
         addDrawableChild(deposit);
         addDrawableChild(withdraw);
-
-        sellField = new TextFieldWidget(this.textRenderer, centerX - 80, 148, 60, 20, Text.literal("Count"));
-        sellField.setPlaceholder(Text.literal("1"));
-        addDrawableChild(sellField);
-        ButtonWidget sell = ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
-            long count = parseCount(sellField.getText());
-            ClientPlayNetworking.send(new EconomyNetworking.ServerSell(count));
-        }).dimensions(centerX - 14, 148, 94, 20).build();
-        sell.active = usable;
-        addDrawableChild(sell);
     }
 
     private void initMarket() {
@@ -221,9 +213,9 @@ public final class HubScreen extends Screen {
     }
 
     private void initShops() {
-        int centerX = this.width / 2;
+        int left = this.width / 2 - 170;
         if (data.nearDepot()) {
-            priceField = new TextFieldWidget(this.textRenderer, centerX - 170, 96, 100, 20, Text.literal("Price"));
+            priceField = new TextFieldWidget(this.textRenderer, left, 70, 90, 20, Text.literal("Price"));
             priceField.setPlaceholder(Text.literal("12.34"));
             addDrawableChild(priceField);
             addDrawableChild(ButtonWidget.builder(Text.literal("List held item"), b -> {
@@ -231,17 +223,23 @@ public final class HubScreen extends Screen {
                 if (price > 0) {
                     ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
                 }
-            }).dimensions(centerX - 64, 96, 120, 20).build());
+            }).dimensions(left + 96, 70, 110, 20).build());
+
+            sellField = new TextFieldWidget(this.textRenderer, left, 94, 40, 20, Text.literal("Count"));
+            sellField.setPlaceholder(Text.literal("1"));
+            addDrawableChild(sellField);
+            addDrawableChild(ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
+                long count = parseCount(sellField.getText());
+                ClientPlayNetworking.send(new EconomyNetworking.ServerSell(count));
+            }).dimensions(left + 46, 94, 160, 20).build());
         }
 
-        int left = centerX - 170;
-        int top = 128;
         addScrollButtons(data.myListings().size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
             ShopRow row = data.myListings().get(i + scroll);
             addDrawableChild(ButtonWidget.builder(Text.literal("Unlist"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.Unlist(row.index())))
-                .dimensions(left + 280, top + i * ROW_HEIGHT - 4, 60, 20).build());
+                .dimensions(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
@@ -336,17 +334,6 @@ public final class HubScreen extends Screen {
                 "This bank is occupied. Try another.", centerX, 84, 0xFFFF8080);
         }
 
-        StringBuilder accepted = new StringBuilder();
-        for (EconomyNetworking.BuyRow row : data.serverBuy()) {
-            if (accepted.length() > 0) {
-                accepted.append(", ");
-            }
-            accepted.append(row.name()).append(" ").append(Currency.format(row.price()));
-        }
-        context.drawCenteredTextWithShadow(this.textRenderer,
-            "Server buys: " + (accepted.length() == 0 ? "nothing" : accepted.toString()),
-            centerX, 174, 0xFFFFE066);
-
         context.drawCenteredTextWithShadow(this.textRenderer,
             "1 Colt = " + data.coltRatio() + " Pice    Interest: "
                 + data.interestPercent() + "% every " + data.interestDays() + " days",
@@ -385,18 +372,28 @@ public final class HubScreen extends Screen {
         if (!data.nearDepot()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
                 "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xFFAAAAAA);
-        } else {
-            context.drawTextWithShadow(this.textRenderer,
-                "Hold an item and set a price to list it.", left, 118, 0xFFAAAAAA);
+            return;
         }
 
-        int top = 128;
+        StringBuilder accepted = new StringBuilder();
+        for (EconomyNetworking.BuyRow row : data.serverBuy()) {
+            if (accepted.length() > 0) {
+                accepted.append(", ");
+            }
+            accepted.append(row.name()).append(" ").append(Currency.format(row.price()));
+        }
+        context.drawTextWithShadow(this.textRenderer,
+            "Server buys: " + (accepted.length() == 0 ? "nothing" : accepted.toString()),
+            left, 118, 0xFFFFE066);
+
+        context.drawTextWithShadow(this.textRenderer, "Your listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
         if (data.myListings().isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "You have no listings.", left, top, 0xFFAAAAAA);
+            context.drawTextWithShadow(this.textRenderer,
+                "None yet. Hold an item, set a price, and List.", left, SHOP_LIST_TOP, 0xFFAAAAAA);
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
             ShopRow row = data.myListings().get(i + scroll);
-            int y = top + i * ROW_HEIGHT;
+            int y = SHOP_LIST_TOP + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
                 left, y + 2, 0xFFFFFFFF);

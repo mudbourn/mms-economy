@@ -1,7 +1,6 @@
 package info.mudbourn.mmseconomy.market;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
-import info.mudbourn.mmseconomy.economy.BankAccess;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.DebugAccess;
 import info.mudbourn.mmseconomy.economy.Tax;
@@ -132,10 +131,6 @@ public final class Marketplace {
         }
 
         ServerPlayerEntity owner = server.getPlayerManager().getPlayer(listing.owner());
-        if (owner == null) {
-            buyer.sendMessage(Text.literal("The owner is offline. Try again later."), false);
-            return;
-        }
 
         Item item = itemOf(listing);
         List<Inventory> barrels = Depot.barrels(world, listing.depot());
@@ -148,7 +143,9 @@ public final class Marketplace {
             return;
         }
 
-        Tax.Settlement settlement = Tax.settleTaxed(buyer, owner, listing.price(), TaxKind.PURCHASE);
+        Tax.Settlement settlement = owner != null
+            ? Tax.settleTaxed(buyer, owner, listing.price(), TaxKind.PURCHASE)
+            : Tax.settleTaxedOffline(buyer, listing.price(), TaxKind.PURCHASE);
         if (settlement == null) {
             buyer.sendMessage(Text.literal("Purchase failed."), false);
             return;
@@ -161,8 +158,14 @@ public final class Marketplace {
         String name = item.getName().getString();
         History.log(buyer, new HistoryEntry(day, HistoryCategory.PURCHASE, name, 1,
             settlement.gross(), settlement.tax(), -settlement.gross(), listing.ownerName()));
-        History.log(owner, new HistoryEntry(day, HistoryCategory.PURCHASE, name, 1,
-            settlement.gross(), settlement.tax(), settlement.net(), buyer.getName().getString()));
+        HistoryEntry ownerEntry = new HistoryEntry(day, HistoryCategory.PURCHASE, name, 1,
+            settlement.gross(), settlement.tax(), settlement.net(), buyer.getName().getString());
+        if (owner != null) {
+            History.log(owner, ownerEntry);
+        } else {
+            info.mudbourn.mmseconomy.economy.PendingPayouts.get(server)
+                .record(listing.owner(), settlement.net(), ownerEntry);
+        }
 
         buyer.sendMessage(Text.literal("Bought " + name + " for " + Currency.format(settlement.gross())
             + " (tax " + Currency.format(settlement.tax()) + ")."), false);
@@ -185,11 +188,19 @@ public final class Marketplace {
         return distance <= (double) ownerRange * ownerRange;
     }
 
-    // Sells the held item to the server at buy-list prices, minting the payout, and requires standing at a bank block.
+    // True when the player stands at a depot that is theirs or unclaimed, not one another player owns.
+    private static boolean atOwnDepot(ServerPlayerEntity player) {
+        BlockPos depot = Depot.detectNear(player, MmsEconomy.config().depotRange);
+        if (depot == null) {
+            return false;
+        }
+        return !Market.get(player.getEntityWorld().getServer()).depotClaimedByOther(depot, player.getUuid());
+    }
+
+    // Sells the held item to the server at buy-list prices, minting the payout, and requires standing at the player's own shop depot.
     public static void serverSell(ServerPlayerEntity player, int count) {
-        if (!DebugAccess.has(player)
-            && BankAccess.nearestBank(player, MmsEconomy.config().bankRange) == null) {
-            player.sendMessage(Text.literal("Stand near a bank block to sell to the server."), false);
+        if (!DebugAccess.has(player) && !atOwnDepot(player)) {
+            player.sendMessage(Text.literal("Stand at your own shop depot to sell to the server."), false);
             return;
         }
 
@@ -233,6 +244,16 @@ public final class Marketplace {
             }
         }
         return null;
+    }
+
+    // Removes the breaker's own listings whose depot includes the barrel at pos, returning how many were closed.
+    public static int removeShopAtBrokenBarrel(ServerPlayerEntity player, BlockPos pos) {
+        ServerWorld world = player.getEntityWorld();
+        String dimension = world.getRegistryKey().getValue().toString();
+        return Market.get(world.getServer()).removeIf(listing ->
+            listing.owner().equals(player.getUuid())
+                && listing.dimension().equals(dimension)
+                && Depot.contains(world, listing.depot(), pos));
     }
 
     public static Item itemOf(String itemId) {

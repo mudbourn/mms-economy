@@ -57,6 +57,26 @@ public final class Tax {
         return new Settlement(amount, tax, net);
     }
 
+    // Debits the buyer and credits the treasury the tax, leaving the net for the caller to escrow for an offline owner.
+    public static Settlement settleTaxedOffline(ServerPlayerEntity from, long amount, TaxKind kind) {
+        if (amount <= 0 || !Wallet.canAfford(from, amount)) {
+            return null;
+        }
+
+        long tax = on(amount, kind);
+        long net = amount - tax;
+        if (!Wallet.withdraw(from, amount)) {
+            return null;
+        }
+
+        MinecraftServer server = from.getEntityWorld().getServer();
+        if (server != null && tax > 0) {
+            Treasury.get(server).credit(tax);
+        }
+
+        return new Settlement(amount, tax, net);
+    }
+
     public record Settlement(long gross, long tax, long net) {
     }
 }
