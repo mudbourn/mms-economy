@@ -73,6 +73,11 @@ public final class BankInterest extends PersistentState {
                 continue;
             }
             Wallet.deposit(player, interest);
+            long day = info.mudbourn.mmseconomy.history.History.currentDay(player);
+            info.mudbourn.mmseconomy.history.History.log(player,
+                new info.mudbourn.mmseconomy.history.HistoryEntry(
+                    day, info.mudbourn.mmseconomy.history.HistoryCategory.PAYMENT, "", 0,
+                    interest, 0L, interest, "Bank interest"));
             player.sendMessage(Text.literal("Bank interest: +" + Currency.format(interest)), false);
         }
     }

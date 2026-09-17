@@ -24,6 +24,10 @@ public final class Gems {
     // A storage block is worth 20 of its base gem, not the crafting-standard nine.
     private static final long BLOCK_UNITS = 20L;
 
+    public static long blockUnits() {
+        return BLOCK_UNITS;
+    }
+
     public static long value(Item item) {
         int ratio = Currency.ratio();
         if (item == ModItems.COLT) {

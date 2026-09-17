@@ -48,6 +48,12 @@ public final class EconomyConfig {
     // Blocks a buyer may be from a listing's depot to buy from it.
     public int depotRange = 8;
 
+    // Blocks a buyer may be from a shop's online owner to buy from it.
+    public int shopOwnerRange = 5;
+
+    // Blocks a buyer may be from a shop's market depot to buy from it.
+    public int shopMarketRange = 15;
+
     // Flat Pice sink charged once when a player first claims a shop depot.
     public long shopSetupFeePice = 1500L;
 
@@ -85,6 +91,8 @@ public final class EconomyConfig {
         "bankRange",
         "bankOccupancyRange",
         "depotRange",
+        "shopOwnerRange",
+        "shopMarketRange",
         "shopSetupFeePice",
         "taxEnabled",
         "taxPayBps",
@@ -109,6 +117,8 @@ public final class EconomyConfig {
                 case "bankRange" -> this.bankRange = Integer.parseInt(value);
                 case "bankOccupancyRange" -> this.bankOccupancyRange = Integer.parseInt(value);
                 case "depotRange" -> this.depotRange = Integer.parseInt(value);
+                case "shopOwnerRange" -> this.shopOwnerRange = Integer.parseInt(value);
+                case "shopMarketRange" -> this.shopMarketRange = Integer.parseInt(value);
                 case "shopSetupFeePice" -> this.shopSetupFeePice = Long.parseLong(value);
                 case "taxEnabled" -> this.taxEnabled = Boolean.parseBoolean(value);
                 case "taxPayBps" -> this.taxPayBps = Integer.parseInt(value);
@@ -141,6 +151,8 @@ public final class EconomyConfig {
             + ", bankRange=" + bankRange
             + ", bankOccupancyRange=" + bankOccupancyRange
             + ", depotRange=" + depotRange
+            + ", shopOwnerRange=" + shopOwnerRange
+            + ", shopMarketRange=" + shopMarketRange
             + ", shopSetupFeePice=" + shopSetupFeePice
             + ", taxEnabled=" + taxEnabled
             + ", taxPayBps=" + taxPayBps

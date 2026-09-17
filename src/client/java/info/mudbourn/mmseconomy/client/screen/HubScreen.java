@@ -8,6 +8,7 @@ import info.mudbourn.mmseconomy.network.EconomyNetworking.MarketRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.OpenHub;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
 
+import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.DrawContext;
@@ -26,6 +27,13 @@ public final class HubScreen extends Screen {
         HISTORY
     }
 
+    // The three server-decided hub variants, mirrored from OpenHub.mode.
+    private static final int MODE_PORTABLE = 0;
+
+    private static final int MODE_MERCHANT = 1;
+
+    private static final int MODE_BANKING = 2;
+
     private static final int LIST_TOP = 78;
 
     private static final int ROW_HEIGHT = 22;
@@ -34,7 +42,7 @@ public final class HubScreen extends Screen {
 
     private OpenHub data;
 
-    private Tab tab = Tab.BANK;
+    private Tab tab;
 
     private int scroll;
 
@@ -57,11 +65,39 @@ public final class HubScreen extends Screen {
     public HubScreen(OpenHub data) {
         super(Text.literal("Economy"));
         this.data = data;
+        this.tab = defaultTab();
     }
 
     public void apply(OpenHub data) {
         this.data = data;
+        if (!tabAllowed(this.tab)) {
+            this.tab = defaultTab();
+            this.scroll = 0;
+        }
         clearAndInit();
+    }
+
+    private Tab defaultTab() {
+        return data.mode() == MODE_BANKING ? Tab.BANK : Tab.MARKET;
+    }
+
+    // The tabs each variant exposes: portable browses the market, merchant adds buying and shop tools, banking is the teller.
+    private boolean tabAllowed(Tab target) {
+        return switch (target) {
+            case MARKET -> data.mode() != MODE_BANKING;
+            case BANK -> data.mode() == MODE_BANKING;
+            case SHOPS -> data.mode() == MODE_MERCHANT;
+            case HISTORY -> true;
+        };
+    }
+
+    private static String tabLabel(Tab target) {
+        return switch (target) {
+            case MARKET -> "Market";
+            case BANK -> "Bank";
+            case SHOPS -> "Shops";
+            case HISTORY -> "History";
+        };
     }
 
     public void applyHistory(List<HistoryEntry> purchases, List<HistoryEntry> payments,
@@ -85,12 +121,20 @@ public final class HubScreen extends Screen {
 
     @Override
     protected void init() {
+        List<Tab> tabs = new ArrayList<>();
+        for (Tab candidate : Tab.values()) {
+            if (tabAllowed(candidate)) {
+                tabs.add(candidate);
+            }
+        }
         int tabWidth = 80;
-        int startX = this.width / 2 - tabWidth * 2 - 6;
-        addTab("Market", Tab.MARKET, startX, tabWidth);
-        addTab("Bank", Tab.BANK, startX + tabWidth + 4, tabWidth);
-        addTab("Shops", Tab.SHOPS, startX + (tabWidth + 4) * 2, tabWidth);
-        addTab("History", Tab.HISTORY, startX + (tabWidth + 4) * 3, tabWidth);
+        int gap = 4;
+        int total = tabWidth * tabs.size() + gap * (tabs.size() - 1);
+        int startX = this.width / 2 - total / 2;
+        for (int i = 0; i < tabs.size(); i++) {
+            Tab candidate = tabs.get(i);
+            addTab(tabLabel(candidate), candidate, startX + i * (tabWidth + gap), tabWidth);
+        }
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
             .dimensions(this.width / 2 - 100, this.height - 28, 200, 20).build());
@@ -151,6 +195,16 @@ public final class HubScreen extends Screen {
         withdraw.active = usable;
         addDrawableChild(deposit);
         addDrawableChild(withdraw);
+
+        sellField = new TextFieldWidget(this.textRenderer, centerX - 80, 148, 60, 20, Text.literal("Count"));
+        sellField.setPlaceholder(Text.literal("1"));
+        addDrawableChild(sellField);
+        ButtonWidget sell = ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
+            long count = parseCount(sellField.getText());
+            ClientPlayNetworking.send(new EconomyNetworking.ServerSell(count));
+        }).dimensions(centerX - 14, 148, 94, 20).build();
+        sell.active = usable;
+        addDrawableChild(sell);
     }
 
     private void initMarket() {
@@ -164,15 +218,6 @@ public final class HubScreen extends Screen {
             buy.active = row.buyable();
             addDrawableChild(buy);
         }
-
-        int y = this.height - 56;
-        sellField = new TextFieldWidget(this.textRenderer, this.width / 2 - 170, y, 60, 20, Text.literal("Count"));
-        sellField.setPlaceholder(Text.literal("1"));
-        addDrawableChild(sellField);
-        addDrawableChild(ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
-            long count = parseCount(sellField.getText());
-            ClientPlayNetworking.send(new EconomyNetworking.ServerSell(count));
-        }).dimensions(this.width / 2 - 104, y, 160, 20).build());
     }
 
     private void initShops() {
@@ -286,20 +331,30 @@ public final class HubScreen extends Screen {
         int centerX = this.width / 2;
         context.drawCenteredTextWithShadow(this.textRenderer,
             "Pocket: " + Currency.format(data.pocket()), centerX, 70, 0xFFFFFFFF);
-        if (!data.hasBank()) {
+        if (data.bankOccupiedByOther()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
-                "Stand within 2 blocks of a bank block's face.", centerX, 150, 0xFFAAAAAA);
-        } else if (data.bankOccupiedByOther()) {
-            context.drawCenteredTextWithShadow(this.textRenderer,
-                "This bank is occupied. Try another.", centerX, 150, 0xFFFF8080);
+                "This bank is occupied. Try another.", centerX, 84, 0xFFFF8080);
+        }
+
+        StringBuilder accepted = new StringBuilder();
+        for (EconomyNetworking.BuyRow row : data.serverBuy()) {
+            if (accepted.length() > 0) {
+                accepted.append(", ");
+            }
+            accepted.append(row.name()).append(" ").append(Currency.format(row.price()));
         }
         context.drawCenteredTextWithShadow(this.textRenderer,
-            "1 Colt = " + data.coltRatio() + " Pice", centerX, 168, 0xFFAAAAAA);
+            "Server buys: " + (accepted.length() == 0 ? "nothing" : accepted.toString()),
+            centerX, 174, 0xFFFFE066);
+
         context.drawCenteredTextWithShadow(this.textRenderer,
-            "Interest: " + data.interestPercent() + "% every "
-                + data.interestDays() + " in-game days", centerX, 180, 0xFFAAAAAA);
+            "1 Colt = " + data.coltRatio() + " Pice    Interest: "
+                + data.interestPercent() + "% every " + data.interestDays() + " days",
+            centerX, 188, 0xFFAAAAAA);
         context.drawCenteredTextWithShadow(this.textRenderer,
-            "Reach: 2 blocks from the block's face, same level.", centerX, 192, 0xFFAAAAAA);
+            "Reach 2 blocks at the face.  A Colt/Pice block = "
+                + info.mudbourn.mmseconomy.economy.Gems.blockUnits() + " gems.",
+            centerX, 200, 0xFFAAAAAA);
     }
 
     private void renderMarket(DrawContext context) {
@@ -319,17 +374,10 @@ public final class HubScreen extends Screen {
                 row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
         }
 
-        int listY = this.height - 68;
-        context.drawTextWithShadow(this.textRenderer, "Sell to server:", this.width / 2 - 170, listY, 0xFFFFE066);
-        StringBuilder buyables = new StringBuilder();
-        for (EconomyNetworking.BuyRow row : data.serverBuy()) {
-            if (buyables.length() > 0) {
-                buyables.append(", ");
-            }
-            buyables.append(row.name()).append(" ").append(Currency.format(row.price()));
-        }
-        String summary = buyables.length() == 0 ? "nothing accepted" : buyables.toString();
-        context.drawTextWithShadow(this.textRenderer, summary, this.width / 2 - 60, listY, 0xFFAAAAAA);
+        String hint = data.mode() == MODE_MERCHANT
+            ? "Buy nearby listings and manage your shop under Shops."
+            : "Browse only. Stand at a barrel shop to buy and sell.";
+        context.drawTextWithShadow(this.textRenderer, hint, left, this.height - 60, 0xFFAAAAAA);
     }
 
     private void renderShops(DrawContext context) {

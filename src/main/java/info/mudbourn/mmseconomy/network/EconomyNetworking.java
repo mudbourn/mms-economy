@@ -49,7 +49,7 @@ public final class EconomyNetworking {
     }
 
     public record OpenHub(long balance, long pocket, int coltRatio, int interestPercent, int interestDays,
-                          boolean hasBank, boolean bankOccupiedByOther, boolean nearDepot,
+                          boolean hasBank, boolean bankOccupiedByOther, boolean nearDepot, int mode,
                           List<MarketRow> listings, List<ShopRow> myListings,
                           List<BuyRow> serverBuy) implements CustomPayload {
         public static final Id<OpenHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_hub"));
@@ -63,6 +63,7 @@ public final class EconomyNetworking {
                 buf.writeBoolean(value.hasBank);
                 buf.writeBoolean(value.bankOccupiedByOther);
                 buf.writeBoolean(value.nearDepot);
+                buf.writeVarInt(value.mode);
                 buf.writeVarInt(value.listings.size());
                 for (MarketRow row : value.listings) {
                     buf.writeVarInt(row.index());
@@ -97,6 +98,7 @@ public final class EconomyNetworking {
                 boolean hasBank = buf.readBoolean();
                 boolean occupied = buf.readBoolean();
                 boolean nearDepot = buf.readBoolean();
+                int mode = buf.readVarInt();
                 int listingCount = buf.readVarInt();
                 List<MarketRow> listings = new ArrayList<>(listingCount);
                 for (int i = 0; i < listingCount; i++) {
@@ -115,7 +117,7 @@ public final class EconomyNetworking {
                     serverBuy.add(new BuyRow(buf.readString(), buf.readString(), buf.readLong()));
                 }
                 return new OpenHub(balance, pocket, coltRatio, interestPercent, interestDays,
-                    hasBank, occupied, nearDepot, listings, mine, serverBuy);
+                    hasBank, occupied, nearDepot, mode, listings, mine, serverBuy);
             });
 
         @Override
@@ -302,10 +304,10 @@ public final class EconomyNetworking {
             ShopListing listing = all.get(i);
             String name = Marketplace.displayName(listing.item());
             boolean sameDim = listing.dimension().equals(dimension);
-            boolean inRange = sameDim && Depot.inRange(player, listing.depot(), depotRange);
+            boolean reachable = Marketplace.canReach(player, listing, server);
             boolean ownerOnline = server.getPlayerManager().getPlayer(listing.owner()) != null;
             int stock = sameDim ? Marketplace.stock(world, listing.depot(), listing.item()) : 0;
-            boolean buyable = inRange && ownerOnline && stock > 0
+            boolean buyable = reachable && ownerOnline && stock > 0
                 && !listing.owner().equals(player.getUuid());
             listings.add(new MarketRow(i, name, listing.price(), listing.ownerName(),
                 listing.depot().getX(), listing.depot().getY(), listing.depot().getZ(), buyable));
@@ -324,14 +326,18 @@ public final class EconomyNetworking {
         }
 
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
+        boolean effectiveBank = hasBank || debug;
+        boolean effectiveDepot = nearDepot || debug;
+        int mode = hasBank ? 2 : (nearDepot ? 1 : 0);
         return new OpenHub(Wallet.balance(player),
             info.mudbourn.mmseconomy.economy.Gems.inventoryValue(player),
             MmsEconomy.config().piceToColtRatio,
             MmsEconomy.config().bankInterestPercent,
             MmsEconomy.config().bankInterestDays,
-            hasBank || debug,
+            effectiveBank,
             occupiedByOther && !debug,
-            nearDepot || debug,
+            effectiveDepot,
+            mode,
             listings, mine, serverBuy);
     }
 

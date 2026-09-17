@@ -58,6 +58,9 @@ public class BankBlock extends HorizontalFacingBlock {
             BlockPos bank = info.mudbourn.mmseconomy.economy.BankAccess.nearestBank(
                 serverPlayer,
                 info.mudbourn.mmseconomy.MmsEconomy.config().bankRange);
+            if (bank == null) {
+                return ActionResult.PASS;
+            }
             EconomyNetworking.openHub(serverPlayer, bank);
         }
         return ActionResult.SUCCESS;

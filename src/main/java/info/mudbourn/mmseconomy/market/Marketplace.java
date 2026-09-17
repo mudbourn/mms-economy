@@ -124,10 +124,10 @@ public final class Marketplace {
 
         ShopListing listing = all.get(index);
         boolean debug = DebugAccess.has(buyer);
-        if (!debug && (!listing.dimension().equals(world.getRegistryKey().getValue().toString())
-            || !Depot.inRange(buyer, listing.depot(), MmsEconomy.config().depotRange))) {
-            buyer.sendMessage(Text.literal("Go to the depot at " + listing.depot().toShortString()
-                + " to buy this."), false);
+        if (!debug && !canReach(buyer, listing, server)) {
+            buyer.sendMessage(Text.literal("Get within " + MmsEconomy.config().shopOwnerRange
+                + " blocks of the owner or " + MmsEconomy.config().shopMarketRange
+                + " blocks of the depot at " + listing.depot().toShortString() + " to buy this."), false);
             return;
         }
 
@@ -166,6 +166,23 @@ public final class Marketplace {
 
         buyer.sendMessage(Text.literal("Bought " + name + " for " + Currency.format(settlement.gross())
             + " (tax " + Currency.format(settlement.tax()) + ")."), false);
+    }
+
+    // A buyer may reach a listing when within shopOwnerRange of its online owner or shopMarketRange of its depot.
+    public static boolean canReach(ServerPlayerEntity buyer, ShopListing listing, MinecraftServer server) {
+        if (!listing.dimension().equals(buyer.getEntityWorld().getRegistryKey().getValue().toString())) {
+            return false;
+        }
+        if (Depot.inRange(buyer, listing.depot(), MmsEconomy.config().shopMarketRange)) {
+            return true;
+        }
+        ServerPlayerEntity owner = server.getPlayerManager().getPlayer(listing.owner());
+        if (owner == null || owner == buyer || owner.getEntityWorld() != buyer.getEntityWorld()) {
+            return false;
+        }
+        int ownerRange = MmsEconomy.config().shopOwnerRange;
+        double distance = buyer.squaredDistanceTo(owner.getX(), owner.getY(), owner.getZ());
+        return distance <= (double) ownerRange * ownerRange;
     }
 
     // Sells the held item to the server at buy-list prices, minting the payout, and requires standing at a bank block.

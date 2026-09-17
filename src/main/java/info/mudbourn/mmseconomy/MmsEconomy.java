@@ -47,7 +47,7 @@ public class MmsEconomy implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             EconomyCommand.register(dispatcher));
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> BankOccupancy.clear());
+        ServerLifecycleEvents.SERVER_STARTED.register(BankOccupancy::scrubOnLoad);
 
         ServerTickEvents.END_SERVER_TICK.register(DealManager::tickAll);
 
