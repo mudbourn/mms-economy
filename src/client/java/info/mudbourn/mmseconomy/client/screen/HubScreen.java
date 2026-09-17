@@ -10,9 +10,7 @@ import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
 
 import java.util.List;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.item.ItemStack;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -286,19 +284,22 @@ public final class HubScreen extends Screen {
 
     private void renderBank(DrawContext context) {
         int centerX = this.width / 2;
-        ItemStack held = MinecraftClient.getInstance().player.getMainHandStack();
-        String heldText = held.isEmpty()
-            ? "empty"
-            : held.getName().getString() + " x" + held.getCount();
-        context.drawItem(held, centerX - 90, 68);
-        context.drawTextWithShadow(this.textRenderer, "In hand: " + heldText, centerX - 70, 72, 0xFFFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer,
+            "Pocket: " + Currency.format(data.pocket()), centerX, 70, 0xFFFFFFFF);
         if (!data.hasBank()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
-                "Stand near a bank block to deposit or withdraw.", centerX, 150, 0xFFAAAAAA);
+                "Stand within 2 blocks of a bank block's face.", centerX, 150, 0xFFAAAAAA);
         } else if (data.bankOccupiedByOther()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
                 "This bank is occupied. Try another.", centerX, 150, 0xFFFF8080);
         }
+        context.drawCenteredTextWithShadow(this.textRenderer,
+            "1 Colt = " + data.coltRatio() + " Pice", centerX, 168, 0xFFAAAAAA);
+        context.drawCenteredTextWithShadow(this.textRenderer,
+            "Interest: " + data.interestPercent() + "% every "
+                + data.interestDays() + " in-game days", centerX, 180, 0xFFAAAAAA);
+        context.drawCenteredTextWithShadow(this.textRenderer,
+            "Reach: 2 blocks from the block's face, same level.", centerX, 192, 0xFFAAAAAA);
     }
 
     private void renderMarket(DrawContext context) {

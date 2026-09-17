@@ -48,13 +48,18 @@ public final class EconomyNetworking {
     public record BuyRow(String itemId, String name, long price) {
     }
 
-    public record OpenHub(long balance, boolean hasBank, boolean bankOccupiedByOther, boolean nearDepot,
+    public record OpenHub(long balance, long pocket, int coltRatio, int interestPercent, int interestDays,
+                          boolean hasBank, boolean bankOccupiedByOther, boolean nearDepot,
                           List<MarketRow> listings, List<ShopRow> myListings,
                           List<BuyRow> serverBuy) implements CustomPayload {
         public static final Id<OpenHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_hub"));
         public static final PacketCodec<RegistryByteBuf, OpenHub> CODEC = PacketCodec.of(
             (value, buf) -> {
                 buf.writeLong(value.balance);
+                buf.writeLong(value.pocket);
+                buf.writeVarInt(value.coltRatio);
+                buf.writeVarInt(value.interestPercent);
+                buf.writeVarInt(value.interestDays);
                 buf.writeBoolean(value.hasBank);
                 buf.writeBoolean(value.bankOccupiedByOther);
                 buf.writeBoolean(value.nearDepot);
@@ -85,6 +90,10 @@ public final class EconomyNetworking {
             },
             buf -> {
                 long balance = buf.readLong();
+                long pocket = buf.readLong();
+                int coltRatio = buf.readVarInt();
+                int interestPercent = buf.readVarInt();
+                int interestDays = buf.readVarInt();
                 boolean hasBank = buf.readBoolean();
                 boolean occupied = buf.readBoolean();
                 boolean nearDepot = buf.readBoolean();
@@ -105,7 +114,8 @@ public final class EconomyNetworking {
                 for (int i = 0; i < buyCount; i++) {
                     serverBuy.add(new BuyRow(buf.readString(), buf.readString(), buf.readLong()));
                 }
-                return new OpenHub(balance, hasBank, occupied, nearDepot, listings, mine, serverBuy);
+                return new OpenHub(balance, pocket, coltRatio, interestPercent, interestDays,
+                    hasBank, occupied, nearDepot, listings, mine, serverBuy);
             });
 
         @Override
@@ -315,6 +325,10 @@ public final class EconomyNetworking {
 
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
         return new OpenHub(Wallet.balance(player),
+            info.mudbourn.mmseconomy.economy.Gems.inventoryValue(player),
+            MmsEconomy.config().piceToColtRatio,
+            MmsEconomy.config().bankInterestPercent,
+            MmsEconomy.config().bankInterestDays,
             hasBank || debug,
             occupiedByOther && !debug,
             nearDepot || debug,
@@ -353,6 +367,14 @@ public final class EconomyNetworking {
             }
             Gems.give(player, amount);
         }
+
+        long day = info.mudbourn.mmseconomy.history.History.currentDay(player);
+        info.mudbourn.mmseconomy.history.History.log(player,
+            new info.mudbourn.mmseconomy.history.HistoryEntry(
+                day, info.mudbourn.mmseconomy.history.HistoryCategory.PAYMENT, "", 0,
+                amount, 0L, action.deposit() ? amount : -amount,
+                action.deposit() ? "Bank deposit" : "Bank withdrawal"));
+
         refresh(player);
     }
 

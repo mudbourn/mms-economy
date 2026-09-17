@@ -12,15 +12,22 @@ import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.Gems;
 import info.mudbourn.mmseconomy.economy.Tax;
 import info.mudbourn.mmseconomy.economy.TaxKind;
+import info.mudbourn.mmseconomy.economy.ServerLibrary;
 import info.mudbourn.mmseconomy.economy.Treasury;
 import info.mudbourn.mmseconomy.economy.Wallet;
+import info.mudbourn.mmseconomy.market.Marketplace;
 import net.minecraft.command.CommandSource;
 import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
+
+import java.util.Map;
 
 // The /eco command tree plus the top-level /pay command.
 public final class EconomyCommand {
@@ -103,6 +110,17 @@ public final class EconomyCommand {
                         context.getSource().sendFeedback(() -> Text.literal("Reloaded the server buy-list."), true);
                         return 1;
                     })))
+            .then(CommandManager.literal("library")
+                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+                .executes(context -> libraryList(context.getSource()))
+                .then(CommandManager.literal("list")
+                    .executes(context -> libraryList(context.getSource())))
+                .then(CommandManager.literal("withdraw")
+                    .then(CommandManager.argument("item", StringArgumentType.string())
+                        .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                            ServerLibrary.get(ctx.getSource().getServer()).view().keySet(), builder))
+                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+                            .executes(EconomyCommand::libraryWithdraw)))))
             .then(CommandManager.literal("debug")
                 .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
                 .then(CommandManager.literal("mint")
@@ -282,6 +300,54 @@ public final class EconomyCommand {
             source.sendFeedback(() -> Text.literal("Took " + Currency.format(amount)
                 + " from " + target.getName().getString() + "."), true);
         }
+        return 1;
+    }
+
+    private static int libraryList(ServerCommandSource source) {
+        Map<String, Long> items = ServerLibrary.get(source.getServer()).view();
+        if (items.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("The server library is empty."), false);
+            return 1;
+        }
+        source.sendFeedback(() -> Text.literal("Server library (" + items.size() + " kinds):"), false);
+        for (Map.Entry<String, Long> entry : items.entrySet()) {
+            source.sendFeedback(() -> Text.literal("  " + Marketplace.displayName(entry.getKey())
+                + " x" + entry.getValue() + "  (" + entry.getKey() + ")"), false);
+        }
+        return 1;
+    }
+
+    private static int libraryWithdraw(CommandContext<ServerCommandSource> context)
+            throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        String itemId = StringArgumentType.getString(context, "item");
+        int count = IntegerArgumentType.getInteger(context, "count");
+        Item item = Marketplace.itemOf(itemId);
+        if (item == null || item == Items.AIR) {
+            source.sendError(Text.literal("Unknown item: " + itemId));
+            return 0;
+        }
+
+        long taken = ServerLibrary.get(source.getServer()).take(itemId, count);
+        if (taken <= 0) {
+            source.sendError(Text.literal("The library holds none of that."));
+            return 0;
+        }
+
+        int maxStack = new ItemStack(item).getMaxCount();
+        long remaining = taken;
+        while (remaining > 0) {
+            int per = (int) Math.min(remaining, maxStack);
+            ItemStack stack = new ItemStack(item, per);
+            if (!player.getInventory().insertStack(stack)) {
+                player.dropItem(stack, false);
+            }
+            remaining -= per;
+        }
+        long withdrawn = taken;
+        source.sendFeedback(() -> Text.literal("Withdrew " + withdrawn + " "
+            + Marketplace.displayName(itemId) + " from the library."), true);
         return 1;
     }
 

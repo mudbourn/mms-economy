@@ -194,6 +194,8 @@ public final class Marketplace {
             return;
         }
         held.decrement(sold);
+        info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer())
+            .store(itemId, sold);
         Wallet.deposit(player, unit * sold);
         player.sendMessage(Text.literal("Sold " + sold + " for " + Currency.format(unit * sold) + "."), false);
     }

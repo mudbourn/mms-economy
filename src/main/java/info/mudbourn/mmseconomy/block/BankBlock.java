@@ -47,7 +47,7 @@ public class BankBlock extends HorizontalFacingBlock {
             .with(OCCUPIED, false);
     }
 
-    // Right-clicking opens the economy hub on the bank tab for the interacting player.
+    // Right-clicking opens the economy hub, honouring the same face and range rules as the /eco command.
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos,
                                  PlayerEntity player, BlockHitResult hit) {
@@ -55,7 +55,10 @@ public class BankBlock extends HorizontalFacingBlock {
             return ActionResult.SUCCESS;
         }
         if (player instanceof ServerPlayerEntity serverPlayer) {
-            EconomyNetworking.openHub(serverPlayer, pos);
+            BlockPos bank = info.mudbourn.mmseconomy.economy.BankAccess.nearestBank(
+                serverPlayer,
+                info.mudbourn.mmseconomy.MmsEconomy.config().bankRange);
+            EconomyNetworking.openHub(serverPlayer, bank);
         }
         return ActionResult.SUCCESS;
     }
