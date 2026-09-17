@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "mms_economy",
+  "version": "${version}",
+  "name": "MMS Economy",
+  "description": "A ruby-currency economy for MMS: gems, wallets, shops, payments and trading.",
+  "authors": [
+    "mudbourn"
+  ],
+  "contact": {
+    "sources": "https://github.com/mudbourn/mms-economy"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "info.mudbourn.mmseconomy.MmsEconomy"
+    ],
+    "client": [
+      "info.mudbourn.mmseconomy.client.MmsEconomyClient"
+    ],
+    "cardinal-components-entity": [
+      "info.mudbourn.mmseconomy.component.ModComponents"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "cardinal-components-base": "*",
+    "cardinal-components-entity": "*"
+  },
+  "suggests": {
+    "rubies": "*"
+  },
+  "custom": {
+    "cardinal-components": [
+      "mms_economy:wallet",
+      "mms_economy:history"
+    ]
+  }
+}

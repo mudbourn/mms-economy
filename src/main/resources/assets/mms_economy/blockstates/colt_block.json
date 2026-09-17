@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "mms_economy:block/colt_block"
+    }
+  }
+}

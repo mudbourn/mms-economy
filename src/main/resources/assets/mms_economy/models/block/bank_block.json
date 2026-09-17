@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "mms_economy:block/bank_top",
+    "bottom": "mms_economy:block/bank_bottom",
+    "front": "mms_economy:block/bank_front",
+    "side": "mms_economy:block/bank_side"
+  }
+}

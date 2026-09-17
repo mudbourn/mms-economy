@@ -1,0 +1,13 @@
+{
+  "itemGroup.mms_economy.economy": "MMS Economy",
+
+  "item.mms_economy.pice": "Pice",
+  "item.mms_economy.colt": "Colt",
+
+  "block.mms_economy.pice_block": "Block of Pice",
+  "block.mms_economy.colt_block": "Block of Colt",
+  "block.mms_economy.bank_block": "Bank",
+
+  "subtitles.mms_economy.bank_open": "Bank opens",
+  "subtitles.mms_economy.bank_close": "Bank closes"
+}

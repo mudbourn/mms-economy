@@ -1,0 +1,14 @@
+{
+  "bank_open": {
+    "subtitle": "subtitles.mms_economy.bank_open",
+    "sounds": [
+      "mms_economy:bank_open"
+    ]
+  },
+  "bank_close": {
+    "subtitle": "subtitles.mms_economy.bank_close",
+    "sounds": [
+      "mms_economy:bank_close"
+    ]
+  }
+}
