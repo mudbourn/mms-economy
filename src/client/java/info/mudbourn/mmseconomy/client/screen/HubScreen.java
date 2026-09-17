@@ -361,9 +361,21 @@ public final class HubScreen extends Screen {
                 row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
         }
 
-        String hint = data.mode() == MODE_MERCHANT
-            ? "Buy nearby listings and manage your shop under Shops."
-            : "Browse only. Stand at a barrel shop to buy and sell.";
+        boolean canBuyAny = false;
+        for (MarketRow row : data.listings()) {
+            if (row.buyable()) {
+                canBuyAny = true;
+                break;
+            }
+        }
+        String hint;
+        if (data.mode() == MODE_MERCHANT) {
+            hint = "Buy listings in reach and manage your shop under Shops.";
+        } else if (canBuyAny) {
+            hint = "Green listings are in reach. Buy them here.";
+        } else {
+            hint = "Browse only. Get near a shop's depot or owner to buy.";
+        }
         context.drawTextWithShadow(this.textRenderer, hint, left, this.height - 60, 0xFFAAAAAA);
     }
 
