@@ -30,7 +30,7 @@ public final class Currency {
         return colt + " Colt " + sub + " Pice";
     }
 
-    // Parses "<colt>.<pice>" or a bare Pice integer into a Pice count, or -1 when malformed or over-precise.
+    // Parses "<colt>.<pice>" or a bare Colt integer into a Pice count, or -1 when malformed or over-precise.
     public static long parse(String text) {
         if (text == null || text.isBlank()) {
             return -1L;
@@ -39,8 +39,8 @@ public final class Currency {
         int dot = trimmed.indexOf('.');
         try {
             if (dot < 0) {
-                long pice = Long.parseLong(trimmed);
-                return pice >= 0 ? pice : -1L;
+                long colt = Long.parseLong(trimmed);
+                return colt >= 0 ? colt * ratio() : -1L;
             }
 
             int ratio = ratio();

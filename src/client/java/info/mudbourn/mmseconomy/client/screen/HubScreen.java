@@ -284,6 +284,8 @@ public final class HubScreen extends Screen {
 
     private void renderBank(DrawContext context) {
         int centerX = this.width / 2;
+        context.drawCenteredTextWithShadow(this.textRenderer,
+            "Balance: " + Currency.format(data.balance()), centerX, 60, 0xFFD700);
         if (!data.hasBank()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
                 "Stand near a bank block to deposit or withdraw.", centerX, 78, 0xAAAAAA);
