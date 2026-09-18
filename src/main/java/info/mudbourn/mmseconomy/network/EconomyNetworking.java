@@ -219,6 +219,16 @@ public final class EconomyNetworking {
         }
     }
 
+    public record RequestHub() implements CustomPayload {
+        public static final Id<RequestHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "request_hub"));
+        public static final PacketCodec<RegistryByteBuf, RequestHub> CODEC = PacketCodec.unit(new RequestHub());
+
+        @Override
+        public Id<? extends CustomPayload> getId() {
+            return ID;
+        }
+    }
+
     public record CloseHub() implements CustomPayload {
         public static final Id<CloseHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "close_hub"));
         public static final PacketCodec<RegistryByteBuf, CloseHub> CODEC = PacketCodec.unit(new CloseHub());
@@ -238,6 +248,7 @@ public final class EconomyNetworking {
         PayloadTypeRegistry.playC2S().register(Unlist.ID, Unlist.CODEC);
         PayloadTypeRegistry.playC2S().register(ServerSell.ID, ServerSell.CODEC);
         PayloadTypeRegistry.playC2S().register(RequestHistory.ID, RequestHistory.CODEC);
+        PayloadTypeRegistry.playC2S().register(RequestHub.ID, RequestHub.CODEC);
         PayloadTypeRegistry.playC2S().register(CloseHub.ID, CloseHub.CODEC);
 
         registerAction(BankAction.ID, EconomyNetworking::handleBankAction);
@@ -258,6 +269,8 @@ public final class EconomyNetworking {
             refresh(player);
         });
         registerAction(RequestHistory.ID, (player, payload) -> openHistory(player));
+        registerAction(RequestHub.ID, (player, payload) ->
+            openHub(player, BankAccess.nearestBank(player, MmsEconomy.config().bankRange)));
         registerAction(CloseHub.ID, (player, payload) -> handleClose(player));
     }
 
@@ -300,6 +313,7 @@ public final class EconomyNetworking {
 
         List<MarketRow> listings = new ArrayList<>();
         List<ShopRow> mine = new ArrayList<>();
+        boolean anyBuyable = false;
         for (int i = 0; i < all.size(); i++) {
             ShopListing listing = all.get(i);
             String name = Marketplace.displayName(listing.item());
@@ -308,6 +322,7 @@ public final class EconomyNetworking {
             int stock = sameDim ? Marketplace.stock(world, listing.depot(), listing.item()) : 0;
             boolean buyable = reachable && stock > 0
                 && !listing.owner().equals(player.getUuid());
+            anyBuyable = anyBuyable || buyable;
             listings.add(new MarketRow(i, name, listing.price(), listing.ownerName(),
                 listing.depot().getX(), listing.depot().getY(), listing.depot().getZ(), buyable));
             if (listing.owner().equals(player.getUuid())) {
@@ -328,7 +343,7 @@ public final class EconomyNetworking {
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
         boolean effectiveBank = hasBank || debug;
         boolean effectiveDepot = nearDepot || debug;
-        int mode = hasBank ? 2 : (nearDepot ? 1 : 0);
+        int mode = hasBank ? 2 : ((anyBuyable || nearDepot) ? 1 : 0);
         return new OpenHub(Wallet.balance(player),
             info.mudbourn.mmseconomy.economy.Gems.inventoryValue(player),
             MmsEconomy.config().piceToColtRatio,

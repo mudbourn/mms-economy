@@ -88,7 +88,7 @@ public final class HubScreen extends Screen {
         return switch (target) {
             case MARKET -> data.mode() != MODE_BANKING;
             case BANK -> data.mode() == MODE_BANKING;
-            case SHOPS -> data.mode() == MODE_MERCHANT;
+            case SHOPS -> data.mode() == MODE_MERCHANT && data.nearDepot();
             case HISTORY -> true;
         };
     }
@@ -369,7 +369,7 @@ public final class HubScreen extends Screen {
             }
         }
         String hint;
-        if (data.mode() == MODE_MERCHANT) {
+        if (data.nearDepot()) {
             hint = "Buy listings in reach and manage your shop under Shops.";
         } else if (canBuyAny) {
             hint = "Green listings are in reach. Buy them here.";

@@ -9,5 +9,8 @@
   "block.mms_economy.bank_block": "Bank",
 
   "subtitles.mms_economy.bank_open": "Bank opens",
-  "subtitles.mms_economy.bank_close": "Bank closes"
+  "subtitles.mms_economy.bank_close": "Bank closes",
+
+  "key.category.mms_economy.economy": "MMS Economy",
+  "key.mms_economy.open_hub": "Open economy menu"
 }
