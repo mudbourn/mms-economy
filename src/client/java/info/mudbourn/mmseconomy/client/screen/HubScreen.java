@@ -44,7 +44,7 @@ public final class HubScreen extends Screen {
 
     private static final int ROW_HEIGHT = 22;
 
-    private static final int ROWS_VISIBLE = 6;
+    private static final int ROWS_VISIBLE = 9;
 
     private OpenHub data;
 
