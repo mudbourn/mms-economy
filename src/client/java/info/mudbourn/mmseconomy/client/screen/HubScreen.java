@@ -314,6 +314,33 @@ public final class HubScreen extends Screen {
         }).dimensions(x + 32, 52, 30, 20).build());
     }
 
+    // The number of rows the active view can scroll through.
+    private int scrollableTotal() {
+        return switch (tab) {
+            case MARKET -> selectedShop == null ? shopGroups().size() : selectedShopRows().size();
+            case SHOPS -> data.myListings().size();
+            case HISTORY -> historyRows().size();
+            case BANK -> 0;
+        };
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount,
+                                 double verticalAmount) {
+        int total = scrollableTotal();
+        int max = Math.max(0, total - ROWS_VISIBLE);
+        if (max == 0 || verticalAmount == 0) {
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+        int next = scroll + (verticalAmount > 0 ? -1 : 1);
+        int clamped = Math.max(0, Math.min(max, next));
+        if (clamped != scroll) {
+            scroll = clamped;
+            clearAndInit();
+        }
+        return true;
+    }
+
     private void sendBank(boolean deposit) {
         long amount = Currency.parse(bankField.getText());
         if (amount <= 0) {
