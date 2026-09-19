@@ -29,7 +29,10 @@ public final class Marketplace {
     private Marketplace() {
     }
 
-    // Lists the held item at a unit price, charging the one-time setup fee on the first claim of the nearest depot.
+    // Blocks the player may be from the barrel wall they look at to claim it as a shop.
+    private static final double SHOP_REACH = 5.0;
+
+    // Lists the held item at a unit price, charging the one-time setup fee on the first claim of the targeted depot.
     public static void list(ServerPlayerEntity player, long price) {
         if (!MmsEconomy.config().marketEnabled) {
             player.sendMessage(Text.literal("The market is disabled."), false);
@@ -42,13 +45,11 @@ public final class Marketplace {
 
         ServerWorld world = player.getEntityWorld();
         Market market = Market.get(world.getServer());
-        BlockPos depot = nearestOwnedDepot(player, market, MmsEconomy.config().shopOwnerRegisterRange);
-        if (depot == null) {
-            depot = Depot.detectNear(player, MmsEconomy.config().depotRange);
-        }
+        BlockPos depot = Depot.lookedAtDepot(player, SHOP_REACH);
         if (depot == null) {
             if (!DebugAccess.has(player)) {
-                player.sendMessage(Text.literal("Stand near a 2x2 barrel depot to run a shop."), false);
+                player.sendMessage(Text.literal(
+                    "Stand in front of and look directly at the 2x2 barrel wall you want as your shop."), false);
                 return;
             }
             depot = player.getBlockPos();
@@ -85,28 +86,6 @@ public final class Marketplace {
             price));
         player.sendMessage(Text.literal("Listed " + held.getItem().getName().getString()
             + " at " + Currency.format(price) + " each."), false);
-    }
-
-    // The player's own nearest shop depot within range, so listing beside it joins that shop rather than opening another.
-    private static BlockPos nearestOwnedDepot(ServerPlayerEntity player, Market market, int range) {
-        String dimension = player.getEntityWorld().getRegistryKey().getValue().toString();
-        BlockPos best = null;
-        double bestDistance = Double.MAX_VALUE;
-        for (ShopListing listing : market.all()) {
-            if (!listing.owner().equals(player.getUuid()) || !listing.dimension().equals(dimension)) {
-                continue;
-            }
-            BlockPos depot = listing.depot();
-            double distance = player.squaredDistanceTo(
-                depot.getX() + 0.5,
-                depot.getY() + 0.5,
-                depot.getZ() + 0.5);
-            if (distance <= (double) range * range && distance < bestDistance) {
-                best = depot;
-                bestDistance = distance;
-            }
-        }
-        return best;
     }
 
     public static void unlist(ServerPlayerEntity player, int index) {

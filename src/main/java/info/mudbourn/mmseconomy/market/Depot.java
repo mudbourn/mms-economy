@@ -4,6 +4,8 @@ import net.minecraft.block.entity.BarrelBlockEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import org.jetbrains.annotations.Nullable;
@@ -51,6 +53,41 @@ public final class Depot {
             }
         }
         return best;
+    }
+
+    // The depot whose barrel the player is looking directly at within reach, or null, so a shop targets exact barrels.
+    @Nullable
+    public static BlockPos lookedAtDepot(ServerPlayerEntity player, double reach) {
+        HitResult hit = player.raycast(reach, 1.0f, false);
+        if (hit.getType() != HitResult.Type.BLOCK) {
+            return null;
+        }
+        return anchorContaining(player.getEntityWorld(), ((BlockHitResult) hit).getBlockPos());
+    }
+
+    // The min-corner anchor of the complete 2x2 depot that includes this barrel, or null.
+    @Nullable
+    private static BlockPos anchorContaining(ServerWorld world, BlockPos barrel) {
+        if (!(world.getBlockEntity(barrel) instanceof BarrelBlockEntity)) {
+            return null;
+        }
+        for (int dx = -1; dx <= 0; dx++) {
+            for (int dy = -1; dy <= 0; dy++) {
+                for (int dz = -1; dz <= 0; dz++) {
+                    BlockPos anchor = barrel.add(dx, dy, dz);
+                    BlockPos[] positions = completePlane(world, anchor);
+                    if (positions == null) {
+                        continue;
+                    }
+                    for (BlockPos member : positions) {
+                        if (member.equals(barrel)) {
+                            return anchor;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public static boolean isValid(ServerWorld world, BlockPos anchor) {

@@ -72,8 +72,14 @@ public final class HubScreen extends Screen {
     // Whether the selected owner's shops are sorted farthest-first instead of closest-first.
     private boolean shopSortInverted;
 
-    // Whether the Shops tab is showing the server buy/sell menu instead of the owner's own tools.
-    private boolean serverShopOpen;
+    // The Shops-tab sub-view: managing existing listings, opening a new shop, or the server buy/sell menu.
+    private enum ShopView {
+        MANAGE,
+        CREATE,
+        SERVER
+    }
+
+    private ShopView shopView = ShopView.MANAGE;
 
     // Whether the server shop is in buy mode; false is sell mode.
     private boolean serverShopBuy = true;
@@ -221,7 +227,7 @@ public final class HubScreen extends Screen {
             this.scroll = 0;
             this.selectedShop = null;
             this.selectedDepot = null;
-            this.serverShopOpen = false;
+            this.shopView = ShopView.MANAGE;
             clearAndInit();
         }).dimensions(x, 28, width, 20).build();
         button.active = target != tab;
@@ -376,35 +382,45 @@ public final class HubScreen extends Screen {
     }
 
     private void initShops() {
-        if (serverShopOpen) {
-            initServerShop();
-            return;
+        switch (shopView) {
+            case CREATE -> initShopCreate();
+            case SERVER -> initServerShop();
+            case MANAGE -> initShopManage();
         }
+    }
+
+    private void initShopManage() {
         int left = this.width / 2 - 170;
-        if (data.nearDepot()) {
-            priceField = new TextFieldWidget(this.textRenderer, left, 70, 90, 20, Text.literal("Price"));
+        addDrawableChild(ButtonWidget.builder(Text.literal("New shop"), b -> {
+            this.shopView = ShopView.CREATE;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 100, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Server shop"), b -> {
+            this.shopView = ShopView.SERVER;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left + 106, 70, 100, 20).build());
+
+        boolean hasShop = !data.myListings().isEmpty();
+        if (hasShop) {
+            priceField = new TextFieldWidget(this.textRenderer, left, 100, 90, 20, Text.literal("Price"));
             priceField.setPlaceholder(Text.literal("12.34"));
             addDrawableChild(priceField);
-            addDrawableChild(ButtonWidget.builder(Text.literal("List held item"), b -> {
+            addDrawableChild(ButtonWidget.builder(Text.literal("List held at your shop"), b -> {
                 long price = Currency.parse(priceField.getText());
                 if (price > 0) {
                     ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
                 }
-            }).dimensions(left + 96, 70, 110, 20).build());
+            }).dimensions(left + 96, 100, 140, 20).build());
 
-            sellField = new TextFieldWidget(this.textRenderer, left, 94, 40, 20, Text.literal("Count"));
+            sellField = new TextFieldWidget(this.textRenderer, left, 124, 40, 20, Text.literal("Count"));
             sellField.setPlaceholder(Text.literal("1"));
             addDrawableChild(sellField);
             addDrawableChild(ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
                 long count = parseCount(sellField.getText());
                 ClientPlayNetworking.send(new EconomyNetworking.ServerSell("", count));
-            }).dimensions(left + 46, 94, 160, 20).build());
-
-            addDrawableChild(ButtonWidget.builder(Text.literal("Server shop (buy / sell)"), b -> {
-                this.serverShopOpen = true;
-                this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left, 116, 206, 20).build());
+            }).dimensions(left + 46, 124, 160, 20).build());
         }
 
         addScrollButtons(data.myListings().size());
@@ -414,6 +430,28 @@ public final class HubScreen extends Screen {
                     ClientPlayNetworking.send(new EconomyNetworking.Unlist(row.index())))
                 .dimensions(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
+    }
+
+    private void initShopCreate() {
+        int left = this.width / 2 - 170;
+        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            this.shopView = ShopView.MANAGE;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 60, 20).build());
+
+        priceField = new TextFieldWidget(this.textRenderer, left, 132, 90, 20, Text.literal("Price"));
+        priceField.setPlaceholder(Text.literal("12.34"));
+        addDrawableChild(priceField);
+        addDrawableChild(ButtonWidget.builder(Text.literal("Open shop with held item"), b -> {
+            long price = Currency.parse(priceField.getText());
+            if (price > 0) {
+                ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
+                this.shopView = ShopView.MANAGE;
+                this.scroll = 0;
+                clearAndInit();
+            }
+        }).dimensions(left + 96, 132, 180, 20).build());
     }
 
     // The catalog rows in the category currently being browsed.
@@ -430,7 +468,7 @@ public final class HubScreen extends Screen {
     private void initServerShop() {
         int left = this.width / 2 - 170;
         addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
-            this.serverShopOpen = false;
+            this.shopView = ShopView.MANAGE;
             this.scroll = 0;
             clearAndInit();
         }).dimensions(left, 70, 60, 20).build());
@@ -500,7 +538,11 @@ public final class HubScreen extends Screen {
                 }
                 yield selectedDepot == null ? selectedOwnerShops().size() : selectedDepotRows().size();
             }
-            case SHOPS -> serverShopOpen ? catalogRows().size() : data.myListings().size();
+            case SHOPS -> switch (shopView) {
+                case SERVER -> catalogRows().size();
+                case MANAGE -> data.myListings().size();
+                case CREATE -> 0;
+            };
             case HISTORY -> historyRows().size();
             case ADMIN -> data.library().size();
             case BANK -> 0;
@@ -734,16 +776,21 @@ public final class HubScreen extends Screen {
                 "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xFFAAAAAA);
             return;
         }
-        if (serverShopOpen) {
-            renderServerShop(context);
-            return;
+        switch (shopView) {
+            case CREATE -> renderShopCreate(context);
+            case SERVER -> renderServerShop(context);
+            case MANAGE -> renderShopManage(context);
         }
+    }
 
-        context.drawTextWithShadow(this.textRenderer, "Your listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
+    private void renderShopManage(DrawContext context) {
+        int left = this.width / 2 - 170;
         if (data.myListings().isEmpty()) {
             context.drawTextWithShadow(this.textRenderer,
-                "None yet. Hold an item, set a price, and List.", left, SHOP_LIST_TOP, 0xFFAAAAAA);
+                "You have no shop yet. Use New shop to open one.", left, 100, 0xFFAAAAAA);
+            return;
         }
+        context.drawTextWithShadow(this.textRenderer, "Your listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
             ShopRow row = data.myListings().get(i + scroll);
             int y = SHOP_LIST_TOP + i * ROW_HEIGHT;
@@ -751,6 +798,17 @@ public final class HubScreen extends Screen {
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
                 left, y + 2, 0xFFFFFFFF);
         }
+    }
+
+    private void renderShopCreate(DrawContext context) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer, "Open a new shop", left + 68, 76, 0xFFFFFFFF);
+        context.drawTextWithShadow(this.textRenderer,
+            "1. Stand in front of and look directly at the 2x2 barrel wall.", left, 100, 0xFFE0E0E0);
+        context.drawTextWithShadow(this.textRenderer,
+            "2. Hold the item to sell and set its price.", left, 112, 0xFFE0E0E0);
+        context.drawTextWithShadow(this.textRenderer,
+            "Opening a new wall costs a one-time setup fee.", left, 158, 0xFFAAAAAA);
     }
 
     private void renderServerShop(DrawContext context) {

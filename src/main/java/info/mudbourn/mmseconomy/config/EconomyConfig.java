@@ -48,9 +48,6 @@ public final class EconomyConfig {
     // Blocks a buyer may be from a listing's depot to buy from it.
     public int depotRange = 8;
 
-    // Blocks around an owner within which listing an item joins their existing shop instead of opening a new one.
-    public int shopOwnerRegisterRange = 16;
-
     // Blocks a buyer may be from a shop's online owner to buy from it.
     public int shopOwnerRange = 5;
 
@@ -97,7 +94,6 @@ public final class EconomyConfig {
         "bankRange",
         "bankOccupancyRange",
         "depotRange",
-        "shopOwnerRegisterRange",
         "shopOwnerRange",
         "shopMarketRange",
         "shopVerticalRange",
@@ -125,7 +121,6 @@ public final class EconomyConfig {
                 case "bankRange" -> this.bankRange = Integer.parseInt(value);
                 case "bankOccupancyRange" -> this.bankOccupancyRange = Integer.parseInt(value);
                 case "depotRange" -> this.depotRange = Integer.parseInt(value);
-                case "shopOwnerRegisterRange" -> this.shopOwnerRegisterRange = Integer.parseInt(value);
                 case "shopOwnerRange" -> this.shopOwnerRange = Integer.parseInt(value);
                 case "shopMarketRange" -> this.shopMarketRange = Integer.parseInt(value);
                 case "shopVerticalRange" -> this.shopVerticalRange = Integer.parseInt(value);
@@ -161,7 +156,6 @@ public final class EconomyConfig {
             + ", bankRange=" + bankRange
             + ", bankOccupancyRange=" + bankOccupancyRange
             + ", depotRange=" + depotRange
-            + ", shopOwnerRegisterRange=" + shopOwnerRegisterRange
             + ", shopOwnerRange=" + shopOwnerRange
             + ", shopMarketRange=" + shopMarketRange
             + ", shopVerticalRange=" + shopVerticalRange
