@@ -44,9 +44,9 @@ public final class HubScreen extends Screen {
 
     private static final int LIST_TOP = 78;
 
-    private static final int SHOP_LIST_TOP = 152;
+    private static final int SHOP_LIST_TOP = 138;
 
-    private static final int SERVER_LIST_TOP = 122;
+    private static final int SERVER_LIST_TOP = 134;
 
     private static final int DETAIL_LIST_TOP = 96;
 
@@ -104,8 +104,6 @@ public final class HubScreen extends Screen {
     private TextFieldWidget bankField;
 
     private TextFieldWidget priceField;
-
-    private TextFieldWidget sellField;
 
     public HubScreen(OpenHub data) {
         super(Text.literal("Economy"));
@@ -413,14 +411,6 @@ public final class HubScreen extends Screen {
                     ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
                 }
             }).dimensions(left + 96, 100, 140, 20).build());
-
-            sellField = new TextFieldWidget(this.textRenderer, left, 124, 40, 20, Text.literal("Count"));
-            sellField.setPlaceholder(Text.literal("1"));
-            addDrawableChild(sellField);
-            addDrawableChild(ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
-                long count = parseCount(sellField.getText());
-                ClientPlayNetworking.send(new EconomyNetworking.ServerSell("", count));
-            }).dimensions(left + 46, 124, 160, 20).build());
         }
 
         addScrollButtons(data.myListings().size());
@@ -572,14 +562,6 @@ public final class HubScreen extends Screen {
             return;
         }
         ClientPlayNetworking.send(new EconomyNetworking.BankAction(deposit, amount));
-    }
-
-    private long parseCount(String text) {
-        try {
-            return Math.max(1L, Long.parseLong(text.trim()));
-        } catch (NumberFormatException e) {
-            return 1L;
-        }
     }
 
     @Override
@@ -815,7 +797,7 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         context.drawTextWithShadow(this.textRenderer,
             serverShopBuy ? "Buy from server (1.5x in stock, 3x minted)" : "Sell to server",
-            left + 68, 76, 0xFFFFE066);
+            left, 118, 0xFFFFE066);
         List<ServerShopRow> rows = catalogRows();
         if (rows.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer,
