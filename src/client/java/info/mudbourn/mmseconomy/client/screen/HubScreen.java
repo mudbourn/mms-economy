@@ -10,6 +10,8 @@ import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -38,6 +40,8 @@ public final class HubScreen extends Screen {
 
     private static final int SHOP_LIST_TOP = 140;
 
+    private static final int DETAIL_LIST_TOP = 96;
+
     private static final int ROW_HEIGHT = 22;
 
     private static final int ROWS_VISIBLE = 6;
@@ -47,6 +51,9 @@ public final class HubScreen extends Screen {
     private Tab tab;
 
     private int scroll;
+
+    // The market owner whose listings are open; null shows the shop list.
+    private String selectedShop;
 
     private List<HistoryEntry> historyPurchases = List.of();
 
@@ -175,6 +182,7 @@ public final class HubScreen extends Screen {
         ButtonWidget button = ButtonWidget.builder(Text.literal(label), b -> {
             this.tab = target;
             this.scroll = 0;
+            this.selectedShop = null;
             clearAndInit();
         }).dimensions(x, 28, width, 20).build();
         button.active = target != tab;
@@ -199,14 +207,62 @@ public final class HubScreen extends Screen {
         addDrawableChild(withdraw);
     }
 
+    // The market listings grouped by owner, ordered by owner name.
+    private List<Map.Entry<String, List<MarketRow>>> shopGroups() {
+        Map<String, List<MarketRow>> byOwner = new TreeMap<>();
+        for (MarketRow row : data.listings()) {
+            byOwner.computeIfAbsent(row.owner(), k -> new ArrayList<>()).add(row);
+        }
+        return new ArrayList<>(byOwner.entrySet());
+    }
+
+    private List<MarketRow> selectedShopRows() {
+        List<MarketRow> rows = new ArrayList<>();
+        for (MarketRow row : data.listings()) {
+            if (row.owner().equals(selectedShop)) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
     private void initMarket() {
+        if (selectedShop == null) {
+            initShopList();
+        } else {
+            initShopListings();
+        }
+    }
+
+    private void initShopList() {
         int left = this.width / 2 - 170;
-        addScrollButtons(data.listings().size());
-        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.listings().size(); i++) {
-            MarketRow row = data.listings().get(i + scroll);
+        List<Map.Entry<String, List<MarketRow>>> groups = shopGroups();
+        addScrollButtons(groups.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < groups.size(); i++) {
+            String owner = groups.get(i + scroll).getKey();
+            addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
+                this.selectedShop = owner;
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+        }
+    }
+
+    private void initShopListings() {
+        int left = this.width / 2 - 170;
+        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            this.selectedShop = null;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 60, 20).build());
+
+        List<MarketRow> rows = selectedShopRows();
+        addScrollButtons(rows.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            MarketRow row = rows.get(i + scroll);
             ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.BuyListing(row.index())))
-                .dimensions(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 50, 20).build();
+                .dimensions(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 50, 20).build();
             buy.active = row.buyable();
             addDrawableChild(buy);
         }
@@ -345,22 +401,55 @@ public final class HubScreen extends Screen {
     }
 
     private void renderMarket(DrawContext context) {
-        int left = this.width / 2 - 170;
-        if (data.listings().isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No listings yet.", left, LIST_TOP, 0xFFAAAAAA);
+        if (selectedShop == null) {
+            renderShopList(context);
+        } else {
+            renderShopListings(context);
         }
-        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.listings().size(); i++) {
-            MarketRow row = data.listings().get(i + scroll);
+        renderMarketHint(context);
+    }
+
+    private void renderShopList(DrawContext context) {
+        int left = this.width / 2 - 170;
+        List<Map.Entry<String, List<MarketRow>>> groups = shopGroups();
+        if (groups.isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer, "No shops yet.", left, LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < groups.size(); i++) {
+            Map.Entry<String, List<MarketRow>> group = groups.get(i + scroll);
             int y = LIST_TOP + i * ROW_HEIGHT;
+            context.drawTextWithShadow(this.textRenderer, group.getKey(), left, y, 0xFFFFFFFF);
+            int count = group.getValue().size();
+            context.drawTextWithShadow(this.textRenderer,
+                count + (count == 1 ? " listing" : " listings"), left, y + 10, 0xFFAAAAAA);
+        }
+    }
+
+    private void renderShopListings(DrawContext context) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer,
+            selectedShop + "'s shop", left + 68, 76, 0xFFFFFFFF);
+        List<MarketRow> rows = selectedShopRows();
+        if (rows.isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            MarketRow row = rows.get(i + scroll);
+            int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
                 row.name() + "  " + Currency.format(row.price()), left, y, 0xFFFFFFFF);
             String detail = row.buyable()
-                ? "by " + row.owner()
-                : "by " + row.owner() + " @ " + row.x() + "," + row.y() + "," + row.z();
+                ? "in reach"
+                : "@ " + row.x() + "," + row.y() + "," + row.z();
             context.drawTextWithShadow(this.textRenderer, detail, left, y + 10,
                 row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
         }
+    }
 
+    private void renderMarketHint(DrawContext context) {
+        int left = this.width / 2 - 170;
         boolean canBuyAny = false;
         for (MarketRow row : data.listings()) {
             if (row.buyable()) {
