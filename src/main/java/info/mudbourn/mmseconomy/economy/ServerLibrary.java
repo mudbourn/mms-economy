@@ -14,7 +14,9 @@ import java.util.TreeMap;
 public final class ServerLibrary extends PersistentState {
 
     public static final Codec<ServerLibrary> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Codec.unboundedMap(Codec.STRING, Codec.LONG).fieldOf("items").forGetter(state -> state.items)
+        Codec.unboundedMap(Codec.STRING, Codec.LONG).fieldOf("items").forGetter(state -> state.items),
+        Codec.unboundedMap(Codec.STRING, Codec.LONG).optionalFieldOf("bought", Map.of())
+            .forGetter(state -> state.bought)
     ).apply(instance, ServerLibrary::new));
 
     public static final PersistentStateType<ServerLibrary> TYPE = new PersistentStateType<>(
@@ -25,33 +27,48 @@ public final class ServerLibrary extends PersistentState {
 
     private final Map<String, Long> items;
 
+    // Cumulative count ever bought by the server per item, never reduced when stock is withdrawn.
+    private final Map<String, Long> bought;
+
     public ServerLibrary() {
         this.items = new TreeMap<>();
+        this.bought = new TreeMap<>();
     }
 
-    public ServerLibrary(Map<String, Long> items) {
+    public ServerLibrary(Map<String, Long> items, Map<String, Long> bought) {
         this.items = new TreeMap<>(items);
+        this.bought = new TreeMap<>(bought);
     }
 
     public static ServerLibrary get(MinecraftServer server) {
         return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
     }
 
-    // The full archive, item id to stored count, in sorted order.
+    // The current stock, item id to available count, in sorted order.
     public Map<String, Long> view() {
         return new TreeMap<>(items);
+    }
+
+    // The cumulative amount ever bought by the server, item id to total, in sorted order.
+    public Map<String, Long> boughtView() {
+        return new TreeMap<>(bought);
     }
 
     public long count(String itemId) {
         return items.getOrDefault(itemId, 0L);
     }
 
-    // Adds count of an item to the archive.
+    public long boughtCount(String itemId) {
+        return bought.getOrDefault(itemId, 0L);
+    }
+
+    // Adds count of an item to the current stock and to the cumulative bought total.
     public void store(String itemId, long count) {
         if (count <= 0) {
             return;
         }
         items.merge(itemId, count, Long::sum);
+        bought.merge(itemId, count, Long::sum);
         markDirty();
     }
 

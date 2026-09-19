@@ -45,13 +45,18 @@ public final class EconomyNetworking {
     public record ShopRow(int index, String name, long price, int stock) {
     }
 
-    public record BuyRow(String itemId, String name, long price) {
+    public record ServerShopRow(String itemId, String name, long sell, long buyPrice,
+                                int stock, int category) {
+    }
+
+    public record LibraryRow(String itemId, String name, long count, long bought) {
     }
 
     public record OpenHub(long balance, long pocket, int coltRatio, int interestPercent, int interestDays,
                           boolean hasBank, boolean bankOccupiedByOther, boolean nearDepot, int mode,
                           List<MarketRow> listings, List<ShopRow> myListings,
-                          List<BuyRow> serverBuy) implements CustomPayload {
+                          List<ServerShopRow> shopCatalog, boolean admin, long treasury,
+                          List<LibraryRow> library) implements CustomPayload {
         public static final Id<OpenHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_hub"));
         public static final PacketCodec<RegistryByteBuf, OpenHub> CODEC = PacketCodec.of(
             (value, buf) -> {
@@ -82,11 +87,23 @@ public final class EconomyNetworking {
                     buf.writeLong(row.price());
                     buf.writeVarInt(row.stock());
                 }
-                buf.writeVarInt(value.serverBuy.size());
-                for (BuyRow row : value.serverBuy) {
+                buf.writeVarInt(value.shopCatalog.size());
+                for (ServerShopRow row : value.shopCatalog) {
                     buf.writeString(row.itemId());
                     buf.writeString(row.name());
-                    buf.writeLong(row.price());
+                    buf.writeLong(row.sell());
+                    buf.writeLong(row.buyPrice());
+                    buf.writeVarInt(row.stock());
+                    buf.writeVarInt(row.category());
+                }
+                buf.writeBoolean(value.admin);
+                buf.writeLong(value.treasury);
+                buf.writeVarInt(value.library.size());
+                for (LibraryRow row : value.library) {
+                    buf.writeString(row.itemId());
+                    buf.writeString(row.name());
+                    buf.writeLong(row.count());
+                    buf.writeLong(row.bought());
                 }
             },
             buf -> {
@@ -111,13 +128,22 @@ public final class EconomyNetworking {
                 for (int i = 0; i < myCount; i++) {
                     mine.add(new ShopRow(buf.readVarInt(), buf.readString(), buf.readLong(), buf.readVarInt()));
                 }
-                int buyCount = buf.readVarInt();
-                List<BuyRow> serverBuy = new ArrayList<>(buyCount);
-                for (int i = 0; i < buyCount; i++) {
-                    serverBuy.add(new BuyRow(buf.readString(), buf.readString(), buf.readLong()));
+                int catalogCount = buf.readVarInt();
+                List<ServerShopRow> shopCatalog = new ArrayList<>(catalogCount);
+                for (int i = 0; i < catalogCount; i++) {
+                    shopCatalog.add(new ServerShopRow(buf.readString(), buf.readString(),
+                        buf.readLong(), buf.readLong(), buf.readVarInt(), buf.readVarInt()));
+                }
+                boolean admin = buf.readBoolean();
+                long treasury = buf.readLong();
+                int libraryCount = buf.readVarInt();
+                List<LibraryRow> library = new ArrayList<>(libraryCount);
+                for (int i = 0; i < libraryCount; i++) {
+                    library.add(new LibraryRow(buf.readString(), buf.readString(),
+                        buf.readLong(), buf.readLong()));
                 }
                 return new OpenHub(balance, pocket, coltRatio, interestPercent, interestDays,
-                    hasBank, occupied, nearDepot, mode, listings, mine, serverBuy);
+                    hasBank, occupied, nearDepot, mode, listings, mine, shopCatalog, admin, treasury, library);
             });
 
         @Override
@@ -197,11 +223,29 @@ public final class EconomyNetworking {
         }
     }
 
-    public record ServerSell(long count) implements CustomPayload {
+    public record ServerSell(String itemId, long count) implements CustomPayload {
         public static final Id<ServerSell> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "server_sell"));
         public static final PacketCodec<RegistryByteBuf, ServerSell> CODEC = PacketCodec.of(
-            (value, buf) -> buf.writeLong(value.count),
-            buf -> new ServerSell(buf.readLong()));
+            (value, buf) -> {
+                buf.writeString(value.itemId);
+                buf.writeLong(value.count);
+            },
+            buf -> new ServerSell(buf.readString(), buf.readLong()));
+
+        @Override
+        public Id<? extends CustomPayload> getId() {
+            return ID;
+        }
+    }
+
+    public record ServerBuy(String itemId, long count) implements CustomPayload {
+        public static final Id<ServerBuy> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "server_buy"));
+        public static final PacketCodec<RegistryByteBuf, ServerBuy> CODEC = PacketCodec.of(
+            (value, buf) -> {
+                buf.writeString(value.itemId);
+                buf.writeLong(value.count);
+            },
+            buf -> new ServerBuy(buf.readString(), buf.readLong()));
 
         @Override
         public Id<? extends CustomPayload> getId() {
@@ -247,6 +291,7 @@ public final class EconomyNetworking {
         PayloadTypeRegistry.playC2S().register(ListHeld.ID, ListHeld.CODEC);
         PayloadTypeRegistry.playC2S().register(Unlist.ID, Unlist.CODEC);
         PayloadTypeRegistry.playC2S().register(ServerSell.ID, ServerSell.CODEC);
+        PayloadTypeRegistry.playC2S().register(ServerBuy.ID, ServerBuy.CODEC);
         PayloadTypeRegistry.playC2S().register(RequestHistory.ID, RequestHistory.CODEC);
         PayloadTypeRegistry.playC2S().register(RequestHub.ID, RequestHub.CODEC);
         PayloadTypeRegistry.playC2S().register(CloseHub.ID, CloseHub.CODEC);
@@ -265,7 +310,17 @@ public final class EconomyNetworking {
             refresh(player);
         });
         registerAction(ServerSell.ID, (player, payload) -> {
-            Marketplace.serverSell(player, (int) Math.min(Integer.MAX_VALUE, payload.count()));
+            int count = (int) Math.min(Integer.MAX_VALUE, payload.count());
+            if (payload.itemId().isEmpty()) {
+                Marketplace.serverSell(player, count);
+            } else {
+                Marketplace.serverSellItem(player, payload.itemId(), count);
+            }
+            refresh(player);
+        });
+        registerAction(ServerBuy.ID, (player, payload) -> {
+            Marketplace.serverBuy(player, payload.itemId(),
+                (int) Math.min(Integer.MAX_VALUE, payload.count()));
             refresh(player);
         });
         registerAction(RequestHistory.ID, (player, payload) -> openHistory(player));
@@ -335,15 +390,39 @@ public final class EconomyNetworking {
         boolean nearDepot = (depot != null && !market.depotClaimedByOther(depot, player.getUuid()))
             || Marketplace.ownsReachableDepot(player);
 
-        List<BuyRow> serverBuy = new ArrayList<>();
-        for (Map.Entry<String, Long> entry : ServerBuyList.entries().entrySet()) {
-            serverBuy.add(new BuyRow(entry.getKey(), Marketplace.displayName(entry.getKey()), entry.getValue()));
+        info.mudbourn.mmseconomy.economy.ServerLibrary shelf =
+            info.mudbourn.mmseconomy.economy.ServerLibrary.get(server);
+        List<ServerShopRow> shopCatalog = new ArrayList<>();
+        for (Map.Entry<String, ServerBuyList.Entry> entry : ServerBuyList.all().entrySet()) {
+            String id = entry.getKey();
+            long sell = entry.getValue().sell();
+            long stock = shelf.count(id);
+            long buyPrice = stock > 0
+                ? ServerBuyList.stockBuyPrice(sell)
+                : ServerBuyList.mintBuyPrice(sell);
+            shopCatalog.add(new ServerShopRow(id, Marketplace.displayName(id), sell, buyPrice,
+                (int) Math.min(Integer.MAX_VALUE, stock), entry.getValue().category().ordinal()));
         }
 
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
         boolean effectiveBank = hasBank || debug;
         boolean effectiveDepot = nearDepot || debug;
         int mode = hasBank ? 2 : ((anyBuyable || nearDepot) ? 1 : 0);
+
+        boolean admin = net.minecraft.server.command.CommandManager.GAMEMASTERS_CHECK
+            .allows(player.getPermissions()) || debug;
+        long treasury = admin ? info.mudbourn.mmseconomy.economy.Treasury.get(server).balance() : 0L;
+        List<LibraryRow> library = new ArrayList<>();
+        if (admin) {
+            Map<String, Long> available = shelf.view();
+            java.util.TreeSet<String> ids = new java.util.TreeSet<>(available.keySet());
+            ids.addAll(shelf.boughtView().keySet());
+            for (String id : ids) {
+                library.add(new LibraryRow(id, Marketplace.displayName(id),
+                    available.getOrDefault(id, 0L), shelf.boughtCount(id)));
+            }
+        }
+
         return new OpenHub(Wallet.balance(player),
             info.mudbourn.mmseconomy.economy.Gems.inventoryValue(player),
             MmsEconomy.config().piceToColtRatio,
@@ -353,7 +432,7 @@ public final class EconomyNetworking {
             occupiedByOther && !debug,
             effectiveDepot,
             mode,
-            listings, mine, serverBuy);
+            listings, mine, shopCatalog, admin, treasury, library);
     }
 
     public static void openHistory(ServerPlayerEntity player) {

@@ -4,11 +4,15 @@ import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.LibraryRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.MarketRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.OpenHub;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.ServerShopRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -18,6 +22,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
 
 // The economy hub: a tab row over a balance header, opened by /eco or a bank block.
 public final class HubScreen extends Screen {
@@ -26,7 +31,8 @@ public final class HubScreen extends Screen {
         MARKET,
         BANK,
         SHOPS,
-        HISTORY
+        HISTORY,
+        ADMIN
     }
 
     // The three server-decided hub variants, mirrored from OpenHub.mode.
@@ -38,13 +44,18 @@ public final class HubScreen extends Screen {
 
     private static final int LIST_TOP = 78;
 
-    private static final int SHOP_LIST_TOP = 140;
+    private static final int SHOP_LIST_TOP = 152;
+
+    private static final int SERVER_LIST_TOP = 122;
 
     private static final int DETAIL_LIST_TOP = 96;
 
+    // The three server-shop category labels, indexed by ServerShopCategory ordinal.
+    private static final String[] CATEGORY_LABELS = {"Unobtainable", "Treasure", "Valuable"};
+
     private static final int ROW_HEIGHT = 22;
 
-    private static final int ROWS_VISIBLE = 9;
+    private static final int ROWS_VISIBLE = 12;
 
     private OpenHub data;
 
@@ -52,8 +63,27 @@ public final class HubScreen extends Screen {
 
     private int scroll;
 
-    // The market owner whose listings are open; null shows the shop list.
+    // The market owner whose shops are open; null shows the owner list.
     private String selectedShop;
+
+    // The depot within the selected owner whose items are open; null shows that owner's shop list.
+    private BlockPos selectedDepot;
+
+    // Whether the selected owner's shops are sorted farthest-first instead of closest-first.
+    private boolean shopSortInverted;
+
+    // Whether the Shops tab is showing the server buy/sell menu instead of the owner's own tools.
+    private boolean serverShopOpen;
+
+    // Whether the server shop is in buy mode; false is sell mode.
+    private boolean serverShopBuy = true;
+
+    // The server-shop category being browsed, as a ServerShopCategory ordinal.
+    private int serverShopCategory;
+
+    // One shop location of an owner: its depot anchor and the listings sold there.
+    private record ShopEntry(BlockPos depot, List<MarketRow> rows) {
+    }
 
     private List<HistoryEntry> historyPurchases = List.of();
 
@@ -97,6 +127,7 @@ public final class HubScreen extends Screen {
             case BANK -> data.mode() == MODE_BANKING;
             case SHOPS -> data.mode() == MODE_MERCHANT && data.nearDepot();
             case HISTORY -> true;
+            case ADMIN -> data.admin();
         };
     }
 
@@ -106,6 +137,7 @@ public final class HubScreen extends Screen {
             case BANK -> "Bank";
             case SHOPS -> "Shops";
             case HISTORY -> "History";
+            case ADMIN -> "Admin";
         };
     }
 
@@ -153,7 +185,12 @@ public final class HubScreen extends Screen {
             case MARKET -> initMarket();
             case SHOPS -> initShops();
             case HISTORY -> initHistory();
+            case ADMIN -> initAdmin();
         }
+    }
+
+    private void initAdmin() {
+        addScrollButtons(data.library().size());
     }
 
     private void initHistory() {
@@ -183,6 +220,8 @@ public final class HubScreen extends Screen {
             this.tab = target;
             this.scroll = 0;
             this.selectedShop = null;
+            this.selectedDepot = null;
+            this.serverShopOpen = false;
             clearAndInit();
         }).dimensions(x, 28, width, 20).build();
         button.active = target != tab;
@@ -226,11 +265,53 @@ public final class HubScreen extends Screen {
         return rows;
     }
 
+    // The selected owner's distinct shop locations, sorted by distance to the player and reversible.
+    private List<ShopEntry> selectedOwnerShops() {
+        Map<BlockPos, List<MarketRow>> byDepot = new LinkedHashMap<>();
+        for (MarketRow row : selectedShopRows()) {
+            byDepot.computeIfAbsent(new BlockPos(row.x(), row.y(), row.z()), k -> new ArrayList<>()).add(row);
+        }
+        List<ShopEntry> shops = new ArrayList<>();
+        for (Map.Entry<BlockPos, List<MarketRow>> entry : byDepot.entrySet()) {
+            shops.add(new ShopEntry(entry.getKey(), entry.getValue()));
+        }
+        shops.sort(Comparator.comparingDouble(shop -> distanceTo(shop.depot())));
+        if (shopSortInverted) {
+            java.util.Collections.reverse(shops);
+        }
+        return shops;
+    }
+
+    private List<MarketRow> selectedDepotRows() {
+        List<MarketRow> rows = new ArrayList<>();
+        for (MarketRow row : selectedShopRows()) {
+            if (row.x() == selectedDepot.getX()
+                && row.y() == selectedDepot.getY()
+                && row.z() == selectedDepot.getZ()) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    // Squared distance from the player to a depot centre, or 0 when the player is unavailable.
+    private double distanceTo(BlockPos depot) {
+        if (this.client == null || this.client.player == null) {
+            return 0.0;
+        }
+        double dx = this.client.player.getX() - (depot.getX() + 0.5);
+        double dy = this.client.player.getY() - (depot.getY() + 0.5);
+        double dz = this.client.player.getZ() - (depot.getZ() + 0.5);
+        return dx * dx + dy * dy + dz * dz;
+    }
+
     private void initMarket() {
         if (selectedShop == null) {
             initShopList();
+        } else if (selectedDepot == null) {
+            initOwnerShops();
         } else {
-            initShopListings();
+            initDepotItems();
         }
     }
 
@@ -248,15 +329,41 @@ public final class HubScreen extends Screen {
         }
     }
 
-    private void initShopListings() {
+    private void initOwnerShops() {
         int left = this.width / 2 - 170;
         addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
             this.selectedShop = null;
             this.scroll = 0;
             clearAndInit();
         }).dimensions(left, 70, 60, 20).build());
+        addDrawableChild(ButtonWidget.builder(
+            Text.literal(shopSortInverted ? "Farthest" : "Closest"), b -> {
+                this.shopSortInverted = !this.shopSortInverted;
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left + 240, 70, 100, 20).build());
 
-        List<MarketRow> rows = selectedShopRows();
+        List<ShopEntry> shops = selectedOwnerShops();
+        addScrollButtons(shops.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
+            ShopEntry shop = shops.get(i + scroll);
+            addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
+                this.selectedDepot = shop.depot();
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+        }
+    }
+
+    private void initDepotItems() {
+        int left = this.width / 2 - 170;
+        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            this.selectedDepot = null;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 60, 20).build());
+
+        List<MarketRow> rows = selectedDepotRows();
         addScrollButtons(rows.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             MarketRow row = rows.get(i + scroll);
@@ -269,6 +376,10 @@ public final class HubScreen extends Screen {
     }
 
     private void initShops() {
+        if (serverShopOpen) {
+            initServerShop();
+            return;
+        }
         int left = this.width / 2 - 170;
         if (data.nearDepot()) {
             priceField = new TextFieldWidget(this.textRenderer, left, 70, 90, 20, Text.literal("Price"));
@@ -286,8 +397,14 @@ public final class HubScreen extends Screen {
             addDrawableChild(sellField);
             addDrawableChild(ButtonWidget.builder(Text.literal("Sell held to server"), b -> {
                 long count = parseCount(sellField.getText());
-                ClientPlayNetworking.send(new EconomyNetworking.ServerSell(count));
+                ClientPlayNetworking.send(new EconomyNetworking.ServerSell("", count));
             }).dimensions(left + 46, 94, 160, 20).build());
+
+            addDrawableChild(ButtonWidget.builder(Text.literal("Server shop (buy / sell)"), b -> {
+                this.serverShopOpen = true;
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left, 116, 206, 20).build());
         }
 
         addScrollButtons(data.myListings().size());
@@ -296,6 +413,66 @@ public final class HubScreen extends Screen {
             addDrawableChild(ButtonWidget.builder(Text.literal("Unlist"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.Unlist(row.index())))
                 .dimensions(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+        }
+    }
+
+    // The catalog rows in the category currently being browsed.
+    private List<ServerShopRow> catalogRows() {
+        List<ServerShopRow> rows = new ArrayList<>();
+        for (ServerShopRow row : data.shopCatalog()) {
+            if (row.category() == serverShopCategory) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    private void initServerShop() {
+        int left = this.width / 2 - 170;
+        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            this.serverShopOpen = false;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 60, 20).build());
+        ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b -> {
+            this.serverShopBuy = true;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left + 216, 70, 60, 20).build();
+        buy.active = !serverShopBuy;
+        addDrawableChild(buy);
+        ButtonWidget sell = ButtonWidget.builder(Text.literal("Sell"), b -> {
+            this.serverShopBuy = false;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left + 280, 70, 60, 20).build();
+        sell.active = serverShopBuy;
+        addDrawableChild(sell);
+
+        int catWidth = 110;
+        for (int c = 0; c < CATEGORY_LABELS.length; c++) {
+            int category = c;
+            ButtonWidget tab = ButtonWidget.builder(Text.literal(CATEGORY_LABELS[c]), b -> {
+                this.serverShopCategory = category;
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left + c * (catWidth + 4), 94, catWidth, 20).build();
+            tab.active = category != serverShopCategory;
+            addDrawableChild(tab);
+        }
+
+        List<ServerShopRow> rows = catalogRows();
+        addScrollButtons(rows.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            ServerShopRow row = rows.get(i + scroll);
+            String label = serverShopBuy ? "Buy" : "Sell";
+            addDrawableChild(ButtonWidget.builder(Text.literal(label), b -> {
+                if (serverShopBuy) {
+                    ClientPlayNetworking.send(new EconomyNetworking.ServerBuy(row.itemId(), 1));
+                } else {
+                    ClientPlayNetworking.send(new EconomyNetworking.ServerSell(row.itemId(), 1));
+                }
+            }).dimensions(left + 280, SERVER_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
@@ -317,9 +494,15 @@ public final class HubScreen extends Screen {
     // The number of rows the active view can scroll through.
     private int scrollableTotal() {
         return switch (tab) {
-            case MARKET -> selectedShop == null ? shopGroups().size() : selectedShopRows().size();
-            case SHOPS -> data.myListings().size();
+            case MARKET -> {
+                if (selectedShop == null) {
+                    yield shopGroups().size();
+                }
+                yield selectedDepot == null ? selectedOwnerShops().size() : selectedDepotRows().size();
+            }
+            case SHOPS -> serverShopOpen ? catalogRows().size() : data.myListings().size();
             case HISTORY -> historyRows().size();
+            case ADMIN -> data.library().size();
             case BANK -> 0;
         };
     }
@@ -369,6 +552,28 @@ public final class HubScreen extends Screen {
             case MARKET -> renderMarket(context);
             case SHOPS -> renderShops(context);
             case HISTORY -> renderHistory(context);
+            case ADMIN -> renderAdmin(context);
+        }
+    }
+
+    private void renderAdmin(DrawContext context) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer,
+            "Taxes collected (Treasury): " + Currency.format(data.treasury()), left, 74, 0xFFFFE066);
+        context.drawTextWithShadow(this.textRenderer,
+            "Items bought by players (history / available now)", left, 90, 0xFFFFFFFF);
+        List<LibraryRow> library = data.library();
+        if (library.isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer,
+                "Nothing bought yet.", left, DETAIL_LIST_TOP + 10, 0xFFAAAAAA);
+            return;
+        }
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < library.size(); i++) {
+            LibraryRow row = library.get(i + scroll);
+            int y = DETAIL_LIST_TOP + 10 + i * ROW_HEIGHT;
+            context.drawTextWithShadow(this.textRenderer, row.name(), left, y, 0xFFFFFFFF);
+            context.drawTextWithShadow(this.textRenderer,
+                "bought " + row.bought() + "  available " + row.count(), left, y + 10, 0xFFAAAAAA);
         }
     }
 
@@ -430,8 +635,10 @@ public final class HubScreen extends Screen {
     private void renderMarket(DrawContext context) {
         if (selectedShop == null) {
             renderShopList(context);
+        } else if (selectedDepot == null) {
+            renderOwnerShops(context);
         } else {
-            renderShopListings(context);
+            renderDepotItems(context);
         }
         renderMarketHint(context);
     }
@@ -453,11 +660,36 @@ public final class HubScreen extends Screen {
         }
     }
 
-    private void renderShopListings(DrawContext context) {
+    private void renderOwnerShops(DrawContext context) {
         int left = this.width / 2 - 170;
         context.drawTextWithShadow(this.textRenderer,
-            selectedShop + "'s shop", left + 68, 76, 0xFFFFFFFF);
-        List<MarketRow> rows = selectedShopRows();
+            selectedShop + "'s shops", left + 68, 76, 0xFFFFFFFF);
+        List<ShopEntry> shops = selectedOwnerShops();
+        if (shops.isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer, "No shops.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
+            ShopEntry shop = shops.get(i + scroll);
+            BlockPos depot = shop.depot();
+            int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
+            context.drawTextWithShadow(this.textRenderer,
+                "@ " + depot.getX() + "," + depot.getY() + "," + depot.getZ(), left, y, 0xFFFFFFFF);
+            int count = shop.rows().size();
+            context.drawTextWithShadow(this.textRenderer,
+                Math.round(Math.sqrt(distanceTo(depot))) + " blocks away  "
+                    + count + (count == 1 ? " item" : " items"),
+                left, y + 10, 0xFFAAAAAA);
+        }
+    }
+
+    private void renderDepotItems(DrawContext context) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer,
+            selectedShop + " @ " + selectedDepot.getX() + ","
+                + selectedDepot.getY() + "," + selectedDepot.getZ(),
+            left + 68, 76, 0xFFFFFFFF);
+        List<MarketRow> rows = selectedDepotRows();
         if (rows.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
             return;
@@ -502,17 +734,10 @@ public final class HubScreen extends Screen {
                 "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xFFAAAAAA);
             return;
         }
-
-        StringBuilder accepted = new StringBuilder();
-        for (EconomyNetworking.BuyRow row : data.serverBuy()) {
-            if (accepted.length() > 0) {
-                accepted.append(", ");
-            }
-            accepted.append(row.name()).append(" ").append(Currency.format(row.price()));
+        if (serverShopOpen) {
+            renderServerShop(context);
+            return;
         }
-        context.drawTextWithShadow(this.textRenderer,
-            "Server buys: " + (accepted.length() == 0 ? "nothing" : accepted.toString()),
-            left, 118, 0xFFFFE066);
 
         context.drawTextWithShadow(this.textRenderer, "Your listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
         if (data.myListings().isEmpty()) {
@@ -525,6 +750,30 @@ public final class HubScreen extends Screen {
             context.drawTextWithShadow(this.textRenderer,
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
                 left, y + 2, 0xFFFFFFFF);
+        }
+    }
+
+    private void renderServerShop(DrawContext context) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer,
+            serverShopBuy ? "Buy from server (1.5x in stock, 3x minted)" : "Sell to server",
+            left + 68, 76, 0xFFFFE066);
+        List<ServerShopRow> rows = catalogRows();
+        if (rows.isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer,
+                "No items in this category.", left, SERVER_LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            ServerShopRow row = rows.get(i + scroll);
+            int y = SERVER_LIST_TOP + i * ROW_HEIGHT;
+            long price = serverShopBuy ? row.buyPrice() : row.sell();
+            context.drawTextWithShadow(this.textRenderer,
+                row.name() + "  " + Currency.format(price), left, y, 0xFFFFFFFF);
+            String detail = serverShopBuy
+                ? (row.stock() > 0 ? "in stock " + row.stock() : "minted to order")
+                : "server pays " + Currency.format(row.sell());
+            context.drawTextWithShadow(this.textRenderer, detail, left, y + 10, 0xFFAAAAAA);
         }
     }
 

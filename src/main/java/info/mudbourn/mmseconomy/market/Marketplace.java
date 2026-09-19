@@ -41,7 +41,11 @@ public final class Marketplace {
         }
 
         ServerWorld world = player.getEntityWorld();
-        BlockPos depot = Depot.detectNear(player, MmsEconomy.config().depotRange);
+        Market market = Market.get(world.getServer());
+        BlockPos depot = nearestOwnedDepot(player, market, MmsEconomy.config().shopOwnerRegisterRange);
+        if (depot == null) {
+            depot = Depot.detectNear(player, MmsEconomy.config().depotRange);
+        }
         if (depot == null) {
             if (!DebugAccess.has(player)) {
                 player.sendMessage(Text.literal("Stand near a 2x2 barrel depot to run a shop."), false);
@@ -50,7 +54,6 @@ public final class Marketplace {
             depot = player.getBlockPos();
         }
 
-        Market market = Market.get(world.getServer());
         if (market.depotClaimedByOther(depot, player.getUuid())) {
             player.sendMessage(Text.literal("That depot belongs to someone else."), false);
             return;
@@ -82,6 +85,28 @@ public final class Marketplace {
             price));
         player.sendMessage(Text.literal("Listed " + held.getItem().getName().getString()
             + " at " + Currency.format(price) + " each."), false);
+    }
+
+    // The player's own nearest shop depot within range, so listing beside it joins that shop rather than opening another.
+    private static BlockPos nearestOwnedDepot(ServerPlayerEntity player, Market market, int range) {
+        String dimension = player.getEntityWorld().getRegistryKey().getValue().toString();
+        BlockPos best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (ShopListing listing : market.all()) {
+            if (!listing.owner().equals(player.getUuid()) || !listing.dimension().equals(dimension)) {
+                continue;
+            }
+            BlockPos depot = listing.depot();
+            double distance = player.squaredDistanceTo(
+                depot.getX() + 0.5,
+                depot.getY() + 0.5,
+                depot.getZ() + 0.5);
+            if (distance <= (double) range * range && distance < bestDistance) {
+                best = depot;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     public static void unlist(ServerPlayerEntity player, int index) {
@@ -243,6 +268,100 @@ public final class Marketplace {
             .store(itemId, sold);
         Wallet.deposit(player, unit * sold);
         player.sendMessage(Text.literal("Sold " + sold + " for " + Currency.format(unit * sold) + "."), false);
+    }
+
+    // Buys count of a catalog item from the server, drawing from library stock at 1.5x and minting the rest at 3x.
+    public static void serverBuy(ServerPlayerEntity player, String itemId, int count) {
+        if (!DebugAccess.has(player) && !atOwnDepot(player)) {
+            player.sendMessage(Text.literal("Stand at your own shop depot to trade with the server."), false);
+            return;
+        }
+        if (count <= 0 || !ServerBuyList.sells(itemId)) {
+            player.sendMessage(Text.literal("The server does not stock that."), false);
+            return;
+        }
+        Item item = itemOf(itemId);
+        long sell = ServerBuyList.priceOf(itemId);
+        if (item == null || sell <= 0) {
+            player.sendMessage(Text.literal("The server does not stock that."), false);
+            return;
+        }
+
+        MinecraftServer server = player.getEntityWorld().getServer();
+        info.mudbourn.mmseconomy.economy.ServerLibrary library =
+            info.mudbourn.mmseconomy.economy.ServerLibrary.get(server);
+        Treasury treasury = Treasury.get(server);
+        int bought = 0;
+        long spent = 0L;
+        for (int i = 0; i < count; i++) {
+            boolean fromStock = library.count(itemId) > 0;
+            long unit = fromStock ? ServerBuyList.stockBuyPrice(sell) : ServerBuyList.mintBuyPrice(sell);
+            if (!Wallet.withdraw(player, unit)) {
+                break;
+            }
+            if (fromStock) {
+                library.take(itemId, 1);
+            }
+            treasury.credit(unit);
+            deliver(player, new ItemStack(item, 1));
+            spent += unit;
+            bought++;
+        }
+        if (bought == 0) {
+            player.sendMessage(Text.literal("You cannot afford that."), false);
+            return;
+        }
+
+        String name = item.getName().getString();
+        long day = History.currentDay(player);
+        History.log(player, new HistoryEntry(day, HistoryCategory.PURCHASE, name, bought,
+            spent, 0L, -spent, "Server"));
+        player.sendMessage(Text.literal("Bought " + bought + " " + name
+            + " for " + Currency.format(spent) + "."), false);
+    }
+
+    // Sells count of a specific item from the player's inventory to the server at the buy-list price.
+    public static void serverSellItem(ServerPlayerEntity player, String itemId, int count) {
+        if (!DebugAccess.has(player) && !atOwnDepot(player)) {
+            player.sendMessage(Text.literal("Stand at your own shop depot to sell to the server."), false);
+            return;
+        }
+        long unit = ServerBuyList.priceOf(itemId);
+        if (unit <= 0) {
+            player.sendMessage(Text.literal("The server does not buy that."), false);
+            return;
+        }
+        Item item = itemOf(itemId);
+        if (item == null) {
+            return;
+        }
+
+        int removed = removeItems(player, item, count);
+        if (removed <= 0) {
+            player.sendMessage(Text.literal("You have none of that to sell."), false);
+            return;
+        }
+        info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer())
+            .store(itemId, removed);
+        Wallet.deposit(player, unit * removed);
+        player.sendMessage(Text.literal("Sold " + removed + " " + item.getName().getString()
+            + " for " + Currency.format(unit * removed) + "."), false);
+    }
+
+    // Removes up to count of an item across the player's inventory, returning how many were taken.
+    private static int removeItems(ServerPlayerEntity player, Item item, int count) {
+        int remaining = count;
+        net.minecraft.entity.player.PlayerInventory inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.size() && remaining > 0; slot++) {
+            ItemStack stack = inventory.getStack(slot);
+            if (stack.getItem() == item && !stack.isEmpty()) {
+                int take = Math.min(remaining, stack.getCount());
+                stack.decrement(take);
+                remaining -= take;
+            }
+        }
+        inventory.markDirty();
+        return count - remaining;
     }
 
     // The owner name of a claimed depot this barrel belongs to when the player may not open it, else null.
