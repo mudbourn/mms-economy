@@ -1,13 +1,16 @@
 package info.mudbourn.mmseconomy.market;
 
 import net.minecraft.block.entity.BarrelBlockEntity;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -31,24 +34,34 @@ public final class Depot {
     public static BlockPos detectNear(ServerPlayerEntity player, int range) {
         ServerWorld world = player.getEntityWorld();
         BlockPos origin = player.getBlockPos();
+        double limit = (double) range * range;
         BlockPos best = null;
         double bestDistance = Double.MAX_VALUE;
 
-        for (int dx = -range; dx <= range; dx++) {
-            for (int dy = -range; dy <= range; dy++) {
-                for (int dz = -range; dz <= range; dz++) {
-                    BlockPos anchor = origin.add(dx, dy, dz);
-                    if (barrels(world, anchor).isEmpty()) {
+        int minChunkX = ChunkSectionPos.getSectionCoord(origin.getX() - range);
+        int maxChunkX = ChunkSectionPos.getSectionCoord(origin.getX() + range);
+        int minChunkZ = ChunkSectionPos.getSectionCoord(origin.getZ() - range);
+        int maxChunkZ = ChunkSectionPos.getSectionCoord(origin.getZ() + range);
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                WorldChunk chunk = world.getChunkManager().getWorldChunk(chunkX, chunkZ);
+                if (chunk == null) {
+                    continue;
+                }
+                for (BlockEntity entity : chunk.getBlockEntities().values()) {
+                    if (!(entity instanceof BarrelBlockEntity)) {
                         continue;
                     }
+                    BlockPos anchor = entity.getPos();
                     double distance = player.squaredDistanceTo(
                         anchor.getX() + 0.5,
                         anchor.getY() + 0.5,
                         anchor.getZ() + 0.5);
-                    if (distance <= (double) range * range && distance < bestDistance) {
-                        best = anchor.toImmutable();
-                        bestDistance = distance;
+                    if (distance > limit || distance >= bestDistance || completePlane(world, anchor) == null) {
+                        continue;
                     }
+                    best = anchor.toImmutable();
+                    bestDistance = distance;
                 }
             }
         }
@@ -127,6 +140,9 @@ public final class Depot {
 
     // True when the block at pos is one of the four barrels of the depot anchored here.
     public static boolean contains(ServerWorld world, BlockPos anchor, BlockPos pos) {
+        if (!withinFootprint(anchor, pos)) {
+            return false;
+        }
         BlockPos[] positions = completePlane(world, anchor);
         if (positions == null) {
             return false;
@@ -137,6 +153,14 @@ public final class Depot {
             }
         }
         return false;
+    }
+
+    // True when pos lies in the 2x2x2 box a depot anchored here could occupy, checked without touching the world.
+    private static boolean withinFootprint(BlockPos anchor, BlockPos pos) {
+        int dx = pos.getX() - anchor.getX();
+        int dy = pos.getY() - anchor.getY();
+        int dz = pos.getZ() - anchor.getZ();
+        return dx >= 0 && dx <= 1 && dy >= 0 && dy <= 1 && dz >= 0 && dz <= 1;
     }
 
     // The four barrel positions of the first complete plane at this anchor, or null.

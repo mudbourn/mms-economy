@@ -16,6 +16,7 @@ import info.mudbourn.mmseconomy.market.ShopListing;
 import info.mudbourn.mmseconomy.registry.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.inventory.Inventory;
 import net.minecraft.network.RegistryByteBuf;
 import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.packet.CustomPayload;
@@ -29,6 +30,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -366,23 +368,23 @@ public final class EconomyNetworking {
         String dimension = world.getRegistryKey().getValue().toString();
         int depotRange = MmsEconomy.config().depotRange;
 
-        List<MarketRow> listings = new ArrayList<>();
+        List<MarketRow> listings = new ArrayList<>(all.size());
         List<ShopRow> mine = new ArrayList<>();
+        Map<BlockPos, List<Inventory>> depots = new HashMap<>();
         boolean anyBuyable = false;
         for (int i = 0; i < all.size(); i++) {
             ShopListing listing = all.get(i);
             String name = Marketplace.displayName(listing.item());
+            boolean own = listing.owner().equals(player.getUuid());
             boolean sameDim = listing.dimension().equals(dimension);
-            boolean reachable = Marketplace.canReach(player, listing, server);
-            int stock = sameDim ? Marketplace.stock(world, listing.depot(), listing.item()) : 0;
-            boolean buyable = reachable && stock > 0
-                && !listing.owner().equals(player.getUuid());
+            boolean buyable = !own && Marketplace.canReach(player, listing, server)
+                && stock(world, depots, listing) > 0;
             anyBuyable = anyBuyable || buyable;
             listings.add(new MarketRow(i, name, listing.price(), listing.ownerName(),
                 listing.depot().getX(), listing.depot().getY(), listing.depot().getZ(), buyable));
-            if (listing.owner().equals(player.getUuid())) {
+            if (own) {
                 mine.add(new ShopRow(i, name, listing.price(),
-                    Marketplace.stock(world, listing.depot(), listing.item())));
+                    sameDim ? stock(world, depots, listing) : 0));
             }
         }
 
@@ -433,6 +435,12 @@ public final class EconomyNetworking {
             effectiveDepot,
             mode,
             listings, mine, shopCatalog, admin, treasury, library);
+    }
+
+    // The listing's live stock, reading each depot's barrels at most once per snapshot.
+    private static int stock(ServerWorld world, Map<BlockPos, List<Inventory>> depots, ShopListing listing) {
+        List<Inventory> barrels = depots.computeIfAbsent(listing.depot(), depot -> Depot.barrels(world, depot));
+        return Marketplace.stock(barrels, listing.item());
     }
 
     public static void openHistory(ServerPlayerEntity player) {

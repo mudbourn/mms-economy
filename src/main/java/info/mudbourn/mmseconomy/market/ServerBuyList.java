@@ -11,6 +11,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -94,7 +95,7 @@ public final class ServerBuyList {
     }
 
     public static Map<String, Entry> all() {
-        return Map.copyOf(entries);
+        return Collections.unmodifiableMap(entries);
     }
 
     private static void save() {

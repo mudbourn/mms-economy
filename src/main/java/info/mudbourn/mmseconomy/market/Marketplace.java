@@ -269,27 +269,21 @@ public final class Marketplace {
         MinecraftServer server = player.getEntityWorld().getServer();
         info.mudbourn.mmseconomy.economy.ServerLibrary library =
             info.mudbourn.mmseconomy.economy.ServerLibrary.get(server);
-        Treasury treasury = Treasury.get(server);
-        int bought = 0;
-        long spent = 0L;
-        for (int i = 0; i < count; i++) {
-            boolean fromStock = library.count(itemId) > 0;
-            long unit = fromStock ? ServerBuyList.stockBuyPrice(sell) : ServerBuyList.mintBuyPrice(sell);
-            if (!Wallet.withdraw(player, unit)) {
-                break;
-            }
-            if (fromStock) {
-                library.take(itemId, 1);
-            }
-            treasury.credit(unit);
-            deliver(player, new ItemStack(item, 1));
-            spent += unit;
-            bought++;
-        }
-        if (bought == 0) {
+        long budget = Wallet.balance(player);
+        long stockPrice = ServerBuyList.stockBuyPrice(sell);
+        long mintPrice = ServerBuyList.mintBuyPrice(sell);
+        long fromStock = Math.min(Math.min(count, library.count(itemId)), budget / stockPrice);
+        budget -= fromStock * stockPrice;
+        long minted = Math.min(count - fromStock, budget / mintPrice);
+        int bought = (int) (fromStock + minted);
+        long spent = fromStock * stockPrice + minted * mintPrice;
+        if (bought == 0 || !Wallet.withdraw(player, spent)) {
             player.sendMessage(Text.literal("You cannot afford that."), false);
             return;
         }
+        library.take(itemId, fromStock);
+        Treasury.get(server).credit(spent);
+        deliverMany(player, item, bought);
 
         String name = item.getName().getString();
         long day = History.currentDay(player);
@@ -382,13 +376,13 @@ public final class Marketplace {
     }
 
     // The live stock of an item across a depot's barrels, or 0 when the depot is gone.
-    public static int stock(ServerWorld world, BlockPos depot, String itemId) {
+    public static int stock(List<Inventory> barrels, String itemId) {
         Item item = itemOf(itemId);
         if (item == null) {
             return 0;
         }
         int total = 0;
-        for (Inventory barrel : Depot.barrels(world, depot)) {
+        for (Inventory barrel : barrels) {
             for (int slot = 0; slot < barrel.size(); slot++) {
                 ItemStack stack = barrel.getStack(slot);
                 if (stack.getItem() == item) {
@@ -424,6 +418,17 @@ public final class Marketplace {
                     return;
                 }
             }
+        }
+    }
+
+    // Gives count of an item in full stacks, dropping whatever does not fit.
+    private static void deliverMany(ServerPlayerEntity player, Item item, int count) {
+        int maxStack = Math.max(1, item.getMaxCount());
+        int remaining = count;
+        while (remaining > 0) {
+            int size = Math.min(remaining, maxStack);
+            deliver(player, new ItemStack(item, size));
+            remaining -= size;
         }
     }
 

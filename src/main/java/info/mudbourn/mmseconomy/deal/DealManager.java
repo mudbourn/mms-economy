@@ -13,7 +13,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -149,12 +151,18 @@ public final class DealManager {
         if (DEALS.isEmpty()) {
             return;
         }
-        java.util.Set<PendingDeal> distinct = new java.util.HashSet<>(DEALS.values());
-        java.util.Set<PendingDeal> expired = new java.util.HashSet<>();
-        for (PendingDeal deal : distinct) {
-            if (deal.tick()) {
+        List<PendingDeal> expired = null;
+        for (Map.Entry<UUID, PendingDeal> entry : DEALS.entrySet()) {
+            PendingDeal deal = entry.getValue();
+            if (entry.getKey().equals(deal.first()) && deal.tick()) {
+                if (expired == null) {
+                    expired = new ArrayList<>();
+                }
                 expired.add(deal);
             }
+        }
+        if (expired == null) {
+            return;
         }
         for (PendingDeal deal : expired) {
             notifyExpired(server, deal.first());

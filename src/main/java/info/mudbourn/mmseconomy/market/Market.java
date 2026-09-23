@@ -9,6 +9,7 @@ import net.minecraft.world.PersistentState;
 import net.minecraft.world.PersistentStateType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,8 +40,9 @@ public final class Market extends PersistentState {
         return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
     }
 
+    // A read-only live view of every listing, in index order.
     public List<ShopListing> all() {
-        return List.copyOf(listings);
+        return Collections.unmodifiableList(listings);
     }
 
     public boolean depotClaimedByOther(BlockPos depot, UUID owner) {

@@ -105,6 +105,11 @@ public final class HubScreen extends Screen {
 
     private TextFieldWidget priceField;
 
+    // The owner grouping of the current snapshot's listings, rebuilt only when the snapshot changes.
+    private List<Map.Entry<String, List<MarketRow>>> shopGroupsCache;
+
+    private OpenHub shopGroupsSource;
+
     public HubScreen(OpenHub data) {
         super(Text.literal("Economy"));
         this.data = data;
@@ -252,11 +257,16 @@ public final class HubScreen extends Screen {
 
     // The market listings grouped by owner, ordered by owner name.
     private List<Map.Entry<String, List<MarketRow>>> shopGroups() {
+        if (shopGroupsSource == data) {
+            return shopGroupsCache;
+        }
         Map<String, List<MarketRow>> byOwner = new TreeMap<>();
         for (MarketRow row : data.listings()) {
             byOwner.computeIfAbsent(row.owner(), k -> new ArrayList<>()).add(row);
         }
-        return new ArrayList<>(byOwner.entrySet());
+        shopGroupsCache = new ArrayList<>(byOwner.entrySet());
+        shopGroupsSource = data;
+        return shopGroupsCache;
     }
 
     private List<MarketRow> selectedShopRows() {

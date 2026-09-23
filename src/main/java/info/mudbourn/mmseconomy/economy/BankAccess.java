@@ -22,6 +22,11 @@ public final class BankAccess {
     private static final double MIN_VERTICAL = -1.5;
     private static final double MAX_VERTICAL = 0.75;
 
+    // The block offsets from the player beyond which no bank face can satisfy the limits above.
+    private static final int SCAN_HORIZONTAL = 3;
+    private static final int SCAN_BELOW = 1;
+    private static final int SCAN_ABOVE = 2;
+
     private BankAccess() {
     }
 
@@ -30,20 +35,24 @@ public final class BankAccess {
     public static BlockPos nearestBank(ServerPlayerEntity player, int range) {
         ServerWorld world = player.getEntityWorld();
         BlockPos origin = player.getBlockPos();
+        BlockPos.Mutable pos = new BlockPos.Mutable();
         BlockPos best = null;
         double bestForward = Double.MAX_VALUE;
+        int horizontal = Math.min(range, SCAN_HORIZONTAL);
+        int below = Math.min(range, SCAN_BELOW);
+        int above = Math.min(range, SCAN_ABOVE);
 
-        for (int dx = -range; dx <= range; dx++) {
-            for (int dy = -range; dy <= range; dy++) {
-                for (int dz = -range; dz <= range; dz++) {
-                    BlockPos pos = origin.add(dx, dy, dz);
+        for (int dx = -horizontal; dx <= horizontal; dx++) {
+            for (int dy = -below; dy <= above; dy++) {
+                for (int dz = -horizontal; dz <= horizontal; dz++) {
+                    pos.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
                     BlockState state = world.getBlockState(pos);
                     if (!state.isOf(ModBlocks.BANK)) {
                         continue;
                     }
                     double forward = forwardIfAtFace(player, pos, state);
                     if (forward >= 0.0 && forward < bestForward) {
-                        best = pos;
+                        best = pos.toImmutable();
                         bestForward = forward;
                     }
                 }
