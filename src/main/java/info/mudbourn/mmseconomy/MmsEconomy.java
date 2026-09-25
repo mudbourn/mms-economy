@@ -17,7 +17,11 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.LecternBlock;
+import net.minecraft.block.entity.LecternBlockEntity;
+import info.mudbourn.mmseconomy.market.ShopBook;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -84,6 +88,26 @@ public class MmsEconomy implements ModInitializer {
                 }
             }
             return ActionResult.PASS;
+        });
+
+        UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
+            if (!(world instanceof ServerWorld serverWorld)
+                || !(player instanceof ServerPlayerEntity serverPlayer)
+                || player.isSneaking()) {
+                return ActionResult.PASS;
+            }
+            BlockState state = serverWorld.getBlockState(hit.getBlockPos());
+            if (!state.isOf(Blocks.LECTERN)
+                || !state.get(LecternBlock.HAS_BOOK)
+                || !(serverWorld.getBlockEntity(hit.getBlockPos()) instanceof LecternBlockEntity lectern)) {
+                return ActionResult.PASS;
+            }
+            ShopBook.Target target = ShopBook.read(lectern.getBook());
+            if (target == null) {
+                return ActionResult.PASS;
+            }
+            EconomyNetworking.openShop(serverPlayer, target);
+            return ActionResult.SUCCESS;
         });
 
         PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {

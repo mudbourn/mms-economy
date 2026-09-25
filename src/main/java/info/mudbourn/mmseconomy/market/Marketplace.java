@@ -32,8 +32,11 @@ public final class Marketplace {
     // Blocks the player may be from the barrel wall they look at to claim it as a shop.
     private static final double SHOP_REACH = 5.0;
 
-    // Lists the held item at a unit price, charging the one-time setup fee on the first claim of the targeted depot.
-    public static void list(ServerPlayerEntity player, long price) {
+    // Longest shop name an owner may set.
+    public static final int MAX_SHOP_NAME = 32;
+
+    // Lists the held item at a unit price at the chosen own shop, or else the looked-at depot, charging the setup fee on a first claim.
+    public static void list(ServerPlayerEntity player, long price, BlockPos chosen) {
         if (!MmsEconomy.config().marketEnabled) {
             player.sendMessage(Text.literal("The market is disabled."), false);
             return;
@@ -45,7 +48,9 @@ public final class Marketplace {
 
         ServerWorld world = player.getEntityWorld();
         Market market = Market.get(world.getServer());
-        BlockPos depot = Depot.lookedAtDepot(player, SHOP_REACH);
+        BlockPos depot = ownedReachableDepot(player, market, chosen)
+            ? chosen
+            : Depot.lookedAtDepot(player, SHOP_REACH);
         if (depot == null) {
             if (!DebugAccess.has(player)) {
                 player.sendMessage(Text.literal(
@@ -83,9 +88,46 @@ public final class Marketplace {
             depot,
             world.getRegistryKey().getValue().toString(),
             itemId,
-            price));
-        player.sendMessage(Text.literal("Listed " + held.getItem().getName().getString()
+            price,
+            held.copyWithCount(1)));
+        player.sendMessage(Text.literal("Listed " + held.getName().getString()
             + " at " + Currency.format(price) + " each."), false);
+    }
+
+    // True when the chosen depot already holds one of the player's listings in this dimension and is within shop reach.
+    private static boolean ownedReachableDepot(ServerPlayerEntity player, Market market, BlockPos chosen) {
+        if (chosen == null || !market.ownsAnyAt(chosen, player.getUuid())) {
+            return false;
+        }
+        ServerWorld world = player.getEntityWorld();
+        String dimension = world.getRegistryKey().getValue().toString();
+        boolean sameDimension = market.all().stream().anyMatch(listing ->
+            listing.depot().equals(chosen)
+                && listing.owner().equals(player.getUuid())
+                && listing.dimension().equals(dimension));
+        return sameDimension
+            && Depot.isValid(world, chosen)
+            && (DebugAccess.has(player) || Depot.withinReach(player, chosen,
+                MmsEconomy.config().shopMarketRange, MmsEconomy.config().shopVerticalRange));
+    }
+
+    // Names one of the player's shops; a blank name restores the default.
+    public static void rename(ServerPlayerEntity player, BlockPos depot, String name) {
+        Market market = Market.get(player.getEntityWorld().getServer());
+        String trimmed = name.strip();
+        if (trimmed.length() > MAX_SHOP_NAME) {
+            trimmed = trimmed.substring(0, MAX_SHOP_NAME);
+        }
+        for (ShopListing listing : market.all()) {
+            if (listing.depot().equals(depot) && listing.owner().equals(player.getUuid())) {
+                market.renameShop(listing.dimension(), depot, trimmed);
+                player.sendMessage(Text.literal(trimmed.isEmpty()
+                    ? "Shop name cleared."
+                    : "Shop renamed to " + trimmed + "."), false);
+                return;
+            }
+        }
+        player.sendMessage(Text.literal("That is not your shop."), false);
     }
 
     public static void unlist(ServerPlayerEntity player, int index) {
@@ -108,8 +150,7 @@ public final class Marketplace {
         }
         for (int i = 0; i < all.size(); i++) {
             ShopListing listing = all.get(i);
-            Item item = itemOf(listing);
-            String name = item != null ? item.getName().getString() : listing.item();
+            String name = displayName(listing);
             player.sendMessage(Text.literal("[" + i + "] " + name + " " + Currency.format(listing.price())
                 + " by " + listing.ownerName() + " at " + listing.depot().toShortString()), false);
         }
@@ -136,9 +177,9 @@ public final class Marketplace {
 
         ServerPlayerEntity owner = server.getPlayerManager().getPlayer(listing.owner());
 
-        Item item = itemOf(listing);
+        ItemStack template = listing.template();
         List<Inventory> barrels = Depot.barrels(world, listing.depot());
-        if (item == null || barrels.isEmpty() || !hasStock(barrels, item)) {
+        if (template.isEmpty() || barrels.isEmpty() || stock(barrels, listing) == 0) {
             buyer.sendMessage(Text.literal("Out of stock."), false);
             return;
         }
@@ -155,11 +196,11 @@ public final class Marketplace {
             return;
         }
 
-        takeOne(barrels, item);
-        deliver(buyer, new ItemStack(item, 1));
+        takeOne(barrels, listing);
+        deliver(buyer, template);
 
         long day = History.currentDay(buyer);
-        String name = item.getName().getString();
+        String name = template.getName().getString();
         History.log(buyer, new HistoryEntry(day, HistoryCategory.PURCHASE, name, 1,
             settlement.gross(), settlement.tax(), -settlement.gross(), listing.ownerName()));
         HistoryEntry ownerEntry = new HistoryEntry(day, HistoryCategory.PURCHASE, name, 1,
@@ -375,17 +416,19 @@ public final class Marketplace {
         return item != null ? item.getName().getString() : itemId;
     }
 
-    // The live stock of an item across a depot's barrels, or 0 when the depot is gone.
-    public static int stock(List<Inventory> barrels, String itemId) {
-        Item item = itemOf(itemId);
-        if (item == null) {
-            return 0;
-        }
+    // The listing's display name, including any custom name its stack carries.
+    public static String displayName(ShopListing listing) {
+        ItemStack template = listing.template();
+        return template.isEmpty() ? listing.item() : template.getName().getString();
+    }
+
+    // The live stock of a listing's exact item across a depot's barrels, or 0 when the depot is gone.
+    public static int stock(List<Inventory> barrels, ShopListing listing) {
         int total = 0;
         for (Inventory barrel : barrels) {
             for (int slot = 0; slot < barrel.size(); slot++) {
                 ItemStack stack = barrel.getStack(slot);
-                if (stack.getItem() == item) {
+                if (listing.matches(stack)) {
                     total += stack.getCount();
                 }
             }
@@ -393,26 +436,11 @@ public final class Marketplace {
         return total;
     }
 
-    private static Item itemOf(ShopListing listing) {
-        return itemOf(listing.item());
-    }
-
-    private static boolean hasStock(List<Inventory> barrels, Item item) {
-        for (Inventory barrel : barrels) {
-            for (int slot = 0; slot < barrel.size(); slot++) {
-                if (barrel.getStack(slot).getItem() == item && !barrel.getStack(slot).isEmpty()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static void takeOne(List<Inventory> barrels, Item item) {
+    private static void takeOne(List<Inventory> barrels, ShopListing listing) {
         for (Inventory barrel : barrels) {
             for (int slot = 0; slot < barrel.size(); slot++) {
                 ItemStack stack = barrel.getStack(slot);
-                if (stack.getItem() == item && !stack.isEmpty()) {
+                if (listing.matches(stack)) {
                     stack.decrement(1);
                     barrel.markDirty();
                     return;

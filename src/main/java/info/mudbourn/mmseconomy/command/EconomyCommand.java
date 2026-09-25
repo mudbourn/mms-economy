@@ -475,7 +475,7 @@ public final class EconomyCommand {
             source.sendError(Text.literal("Set a price like 12.34 or a whole number of Pice."));
             return 0;
         }
-        info.mudbourn.mmseconomy.market.Marketplace.list(source.getPlayerOrThrow(), price);
+        info.mudbourn.mmseconomy.market.Marketplace.list(source.getPlayerOrThrow(), price, null);
         return 1;
     }
 

@@ -9,16 +9,19 @@ import net.minecraft.util.Identifier;
 
 import java.util.function.Function;
 
-// Registers the mod's gem currency items.
+// Registers the mod's gem currency items and the shop book.
 public final class ModItems {
 
     public static Item PICE;
 
     public static Item COLT;
 
+    public static Item SHOP_BOOK;
+
     public static void register() {
         PICE = register("pice", Item::new, new Item.Settings());
         COLT = register("colt", Item::new, new Item.Settings());
+        SHOP_BOOK = register("shop_book", Item::new, new Item.Settings().maxCount(1));
     }
 
     private static Item register(String name, Function<Item.Settings, Item> factory,

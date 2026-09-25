@@ -27,6 +27,7 @@ public final class ModItemGroups {
                 entries.add(ModBlocks.COLT_BLOCK);
                 entries.add(ModBlocks.PICE_BLOCK);
                 entries.add(ModBlocks.BANK);
+                entries.add(ModItems.SHOP_BOOK);
             })
             .build());
     }

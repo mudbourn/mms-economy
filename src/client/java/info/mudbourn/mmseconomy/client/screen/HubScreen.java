@@ -21,6 +21,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
@@ -44,7 +45,9 @@ public final class HubScreen extends Screen {
 
     private static final int LIST_TOP = 78;
 
-    private static final int SHOP_LIST_TOP = 138;
+    private static final int MY_SHOPS_TOP = 110;
+
+    private static final int SHOP_LIST_TOP = 152;
 
     private static final int SERVER_LIST_TOP = 134;
 
@@ -81,6 +84,16 @@ public final class HubScreen extends Screen {
 
     private ShopView shopView = ShopView.MANAGE;
 
+    // The player's own shop open in the Shops tab; null shows the list of their shops.
+    private BlockPos selectedMyDepot;
+
+    // Horizontal space a row's item icon takes before its text.
+    private static final int ICON_WIDTH = 20;
+
+    // One of the player's own shops: its depot, custom name, and the listings sold there.
+    private record MyShop(BlockPos depot, String name, List<ShopRow> rows) {
+    }
+
     // Whether the server shop is in buy mode; false is sell mode.
     private boolean serverShopBuy = true;
 
@@ -88,7 +101,7 @@ public final class HubScreen extends Screen {
     private int serverShopCategory;
 
     // One shop location of an owner: its depot anchor and the listings sold there.
-    private record ShopEntry(BlockPos depot, List<MarketRow> rows) {
+    private record ShopEntry(BlockPos depot, String name, List<MarketRow> rows) {
     }
 
     private List<HistoryEntry> historyPurchases = List.of();
@@ -105,6 +118,8 @@ public final class HubScreen extends Screen {
 
     private TextFieldWidget priceField;
 
+    private TextFieldWidget nameField;
+
     // The owner grouping of the current snapshot's listings, rebuilt only when the snapshot changes.
     private List<Map.Entry<String, List<MarketRow>>> shopGroupsCache;
 
@@ -114,15 +129,32 @@ public final class HubScreen extends Screen {
         super(Text.literal("Economy"));
         this.data = data;
         this.tab = defaultTab();
+        focus();
     }
 
     public void apply(OpenHub data) {
         this.data = data;
+        focus();
+        if (selectedMyDepot != null && myDepotRows().isEmpty()) {
+            this.selectedMyDepot = null;
+            this.scroll = 0;
+        }
         if (!tabAllowed(this.tab)) {
             this.tab = defaultTab();
             this.scroll = 0;
         }
         clearAndInit();
+    }
+
+    // Jumps the market to the owner and depot a shop lectern named, when the snapshot carries one.
+    private void focus() {
+        if (data.focusOwner().isEmpty() || !tabAllowed(Tab.MARKET)) {
+            return;
+        }
+        this.tab = Tab.MARKET;
+        this.scroll = 0;
+        this.selectedShop = data.focusOwner();
+        this.selectedDepot = data.focusDepot();
     }
 
     private Tab defaultTab() {
@@ -230,6 +262,7 @@ public final class HubScreen extends Screen {
             this.scroll = 0;
             this.selectedShop = null;
             this.selectedDepot = null;
+            this.selectedMyDepot = null;
             this.shopView = ShopView.MANAGE;
             clearAndInit();
         }).dimensions(x, 28, width, 20).build();
@@ -287,7 +320,7 @@ public final class HubScreen extends Screen {
         }
         List<ShopEntry> shops = new ArrayList<>();
         for (Map.Entry<BlockPos, List<MarketRow>> entry : byDepot.entrySet()) {
-            shops.add(new ShopEntry(entry.getKey(), entry.getValue()));
+            shops.add(new ShopEntry(entry.getKey(), entry.getValue().get(0).shopName(), entry.getValue()));
         }
         shops.sort(Comparator.comparingDouble(shop -> distanceTo(shop.depot())));
         if (shopSortInverted) {
@@ -306,6 +339,35 @@ public final class HubScreen extends Screen {
             }
         }
         return rows;
+    }
+
+    // The player's own listings grouped by depot, closest shop first.
+    private List<MyShop> myShops() {
+        Map<BlockPos, List<ShopRow>> byDepot = new LinkedHashMap<>();
+        for (ShopRow row : data.myListings()) {
+            byDepot.computeIfAbsent(row.depot(), k -> new ArrayList<>()).add(row);
+        }
+        List<MyShop> shops = new ArrayList<>();
+        for (Map.Entry<BlockPos, List<ShopRow>> entry : byDepot.entrySet()) {
+            shops.add(new MyShop(entry.getKey(), entry.getValue().get(0).shopName(), entry.getValue()));
+        }
+        shops.sort(Comparator.comparingDouble(shop -> distanceTo(shop.depot())));
+        return shops;
+    }
+
+    private List<ShopRow> myDepotRows() {
+        List<ShopRow> rows = new ArrayList<>();
+        for (ShopRow row : data.myListings()) {
+            if (row.depot().equals(selectedMyDepot)) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    // A shop's custom name, or its depot coordinates when it has none.
+    private static String shopLabel(String name, BlockPos depot) {
+        return name.isEmpty() ? "@ " + depot.getX() + "," + depot.getY() + "," + depot.getZ() : name;
     }
 
     // Squared distance from the player to a depot centre, or 0 when the player is unavailable.
@@ -376,6 +438,9 @@ public final class HubScreen extends Screen {
             this.scroll = 0;
             clearAndInit();
         }).dimensions(left, 70, 60, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Get shop book"), b ->
+                ClientPlayNetworking.send(new EconomyNetworking.RequestShopBook(selectedShop, selectedDepot)))
+            .dimensions(left + 66, 70, 100, 20).build());
 
         List<MarketRow> rows = selectedDepotRows();
         addScrollButtons(rows.size());
@@ -398,6 +463,14 @@ public final class HubScreen extends Screen {
     }
 
     private void initShopManage() {
+        if (selectedMyDepot == null) {
+            initMyShopList();
+        } else {
+            initMyShop();
+        }
+    }
+
+    private void initMyShopList() {
         int left = this.width / 2 - 170;
         addDrawableChild(ButtonWidget.builder(Text.literal("New shop"), b -> {
             this.shopView = ShopView.CREATE;
@@ -410,22 +483,49 @@ public final class HubScreen extends Screen {
             clearAndInit();
         }).dimensions(left + 106, 70, 100, 20).build());
 
-        boolean hasShop = !data.myListings().isEmpty();
-        if (hasShop) {
-            priceField = new TextFieldWidget(this.textRenderer, left, 100, 90, 20, Text.literal("Price"));
-            priceField.setPlaceholder(Text.literal("12.34"));
-            addDrawableChild(priceField);
-            addDrawableChild(ButtonWidget.builder(Text.literal("List held at your shop"), b -> {
-                long price = Currency.parse(priceField.getText());
-                if (price > 0) {
-                    ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
-                }
-            }).dimensions(left + 96, 100, 140, 20).build());
+        List<MyShop> shops = myShops();
+        addScrollButtons(shops.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
+            MyShop shop = shops.get(i + scroll);
+            addDrawableChild(ButtonWidget.builder(Text.literal("Manage"), b -> {
+                this.selectedMyDepot = shop.depot();
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left + 280, MY_SHOPS_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
+    }
 
-        addScrollButtons(data.myListings().size());
-        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
-            ShopRow row = data.myListings().get(i + scroll);
+    private void initMyShop() {
+        int left = this.width / 2 - 170;
+        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            this.selectedMyDepot = null;
+            this.scroll = 0;
+            clearAndInit();
+        }).dimensions(left, 70, 60, 20).build());
+
+        List<ShopRow> rows = myDepotRows();
+        nameField = new TextFieldWidget(this.textRenderer, left, 100, 150, 20, Text.literal("Shop name"));
+        nameField.setMaxLength(info.mudbourn.mmseconomy.market.Marketplace.MAX_SHOP_NAME);
+        nameField.setPlaceholder(Text.literal("Shop name"));
+        nameField.setText(rows.isEmpty() ? "" : rows.get(0).shopName());
+        addDrawableChild(nameField);
+        addDrawableChild(ButtonWidget.builder(Text.literal("Rename"), b ->
+                ClientPlayNetworking.send(new EconomyNetworking.RenameShop(selectedMyDepot, nameField.getText())))
+            .dimensions(left + 156, 100, 80, 20).build());
+
+        priceField = new TextFieldWidget(this.textRenderer, left, 124, 90, 20, Text.literal("Price"));
+        priceField.setPlaceholder(Text.literal("12.34"));
+        addDrawableChild(priceField);
+        addDrawableChild(ButtonWidget.builder(Text.literal("List held item here"), b -> {
+            long price = Currency.parse(priceField.getText());
+            if (price > 0) {
+                ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price, selectedMyDepot));
+            }
+        }).dimensions(left + 96, 124, 140, 20).build());
+
+        addScrollButtons(rows.size());
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            ShopRow row = rows.get(i + scroll);
             addDrawableChild(ButtonWidget.builder(Text.literal("Unlist"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.Unlist(row.index())))
                 .dimensions(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
@@ -446,7 +546,7 @@ public final class HubScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.literal("Open shop with held item"), b -> {
             long price = Currency.parse(priceField.getText());
             if (price > 0) {
-                ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price));
+                ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price, null));
                 this.shopView = ShopView.MANAGE;
                 this.scroll = 0;
                 clearAndInit();
@@ -540,7 +640,7 @@ public final class HubScreen extends Screen {
             }
             case SHOPS -> switch (shopView) {
                 case SERVER -> catalogRows().size();
-                case MANAGE -> data.myListings().size();
+                case MANAGE -> selectedMyDepot == null ? myShops().size() : myDepotRows().size();
                 case CREATE -> 0;
             };
             case HISTORY -> historyRows().size();
@@ -583,8 +683,8 @@ public final class HubScreen extends Screen {
 
         switch (tab) {
             case BANK -> renderBank(context);
-            case MARKET -> renderMarket(context);
-            case SHOPS -> renderShops(context);
+            case MARKET -> renderMarket(context, mouseX, mouseY);
+            case SHOPS -> renderShops(context, mouseX, mouseY);
             case HISTORY -> renderHistory(context);
             case ADMIN -> renderAdmin(context);
         }
@@ -666,13 +766,13 @@ public final class HubScreen extends Screen {
             centerX, 200, 0xFFAAAAAA);
     }
 
-    private void renderMarket(DrawContext context) {
+    private void renderMarket(DrawContext context, int mouseX, int mouseY) {
         if (selectedShop == null) {
             renderShopList(context);
         } else if (selectedDepot == null) {
             renderOwnerShops(context);
         } else {
-            renderDepotItems(context);
+            renderDepotItems(context, mouseX, mouseY);
         }
         renderMarketHint(context);
     }
@@ -707,23 +807,40 @@ public final class HubScreen extends Screen {
             ShopEntry shop = shops.get(i + scroll);
             BlockPos depot = shop.depot();
             int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer,
-                "@ " + depot.getX() + "," + depot.getY() + "," + depot.getZ(), left, y, 0xFFFFFFFF);
-            int count = shop.rows().size();
-            context.drawTextWithShadow(this.textRenderer,
-                Math.round(Math.sqrt(distanceTo(depot))) + " blocks away  "
-                    + count + (count == 1 ? " item" : " items"),
+            context.drawTextWithShadow(this.textRenderer, shopLabel(shop.name(), depot), left, y, 0xFFFFFFFF);
+            context.drawTextWithShadow(this.textRenderer, shopDetail(depot, shop.name(), shop.rows().size()),
                 left, y + 10, 0xFFAAAAAA);
         }
     }
 
-    private void renderDepotItems(DrawContext context) {
+    // A shop row's second line: coordinates when the name hides them, distance, and item count.
+    private String shopDetail(BlockPos depot, String name, int count) {
+        String coords = name.isEmpty() ? "" : "@ " + depot.getX() + "," + depot.getY() + "," + depot.getZ() + "  ";
+        return coords + Math.round(Math.sqrt(distanceTo(depot))) + " blocks away  "
+            + count + (count == 1 ? " item" : " items");
+    }
+
+    // Draws a listing's item icon and, when the mouse is over its row, the full item tooltip.
+    private void drawItemRow(DrawContext context, ItemStack stack, int left, int y, int mouseX, int mouseY) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        context.drawItem(stack, left, y - 4);
+        if (mouseX >= left && mouseX < left + 270 && mouseY >= y - 4 && mouseY < y - 4 + ROW_HEIGHT) {
+            context.drawItemTooltip(this.textRenderer, stack, mouseX, mouseY);
+        }
+    }
+
+    private void renderDepotItems(DrawContext context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer,
-            selectedShop + " @ " + selectedDepot.getX() + ","
-                + selectedDepot.getY() + "," + selectedDepot.getZ(),
-            left + 68, 76, 0xFFFFFFFF);
         List<MarketRow> rows = selectedDepotRows();
+        String name = rows.isEmpty() ? "" : rows.get(0).shopName();
+        context.drawTextWithShadow(this.textRenderer,
+            name.isEmpty()
+                ? selectedShop + " @ " + selectedDepot.getX() + ","
+                    + selectedDepot.getY() + "," + selectedDepot.getZ()
+                : name + " (" + selectedShop + ")",
+            left + 68, 76, 0xFFFFFFFF);
         if (rows.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
             return;
@@ -732,12 +849,13 @@ public final class HubScreen extends Screen {
             MarketRow row = rows.get(i + scroll);
             int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
-                row.name() + "  " + Currency.format(row.price()), left, y, 0xFFFFFFFF);
+                row.name() + "  " + Currency.format(row.price()), left + ICON_WIDTH, y, 0xFFFFFFFF);
             String detail = row.buyable()
                 ? "in reach"
                 : "@ " + row.x() + "," + row.y() + "," + row.z();
-            context.drawTextWithShadow(this.textRenderer, detail, left, y + 10,
+            context.drawTextWithShadow(this.textRenderer, detail, left + ICON_WIDTH, y + 10,
                 row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
+            drawItemRow(context, row.stack(), left, y, mouseX, mouseY);
         }
     }
 
@@ -761,7 +879,7 @@ public final class HubScreen extends Screen {
         context.drawTextWithShadow(this.textRenderer, hint, left, this.height - 60, 0xFFAAAAAA);
     }
 
-    private void renderShops(DrawContext context) {
+    private void renderShops(DrawContext context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         if (!data.nearDepot()) {
             context.drawCenteredTextWithShadow(this.textRenderer,
@@ -771,24 +889,47 @@ public final class HubScreen extends Screen {
         switch (shopView) {
             case CREATE -> renderShopCreate(context);
             case SERVER -> renderServerShop(context);
-            case MANAGE -> renderShopManage(context);
+            case MANAGE -> {
+                if (selectedMyDepot == null) {
+                    renderMyShopList(context);
+                } else {
+                    renderMyShop(context, mouseX, mouseY);
+                }
+            }
         }
     }
 
-    private void renderShopManage(DrawContext context) {
+    private void renderMyShopList(DrawContext context) {
         int left = this.width / 2 - 170;
-        if (data.myListings().isEmpty()) {
+        List<MyShop> shops = myShops();
+        if (shops.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer,
                 "You have no shop yet. Use New shop to open one.", left, 100, 0xFFAAAAAA);
             return;
         }
-        context.drawTextWithShadow(this.textRenderer, "Your listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
-        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.myListings().size(); i++) {
-            ShopRow row = data.myListings().get(i + scroll);
+        context.drawTextWithShadow(this.textRenderer, "Your shops", left, MY_SHOPS_TOP - 14, 0xFFFFFFFF);
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
+            MyShop shop = shops.get(i + scroll);
+            int y = MY_SHOPS_TOP + i * ROW_HEIGHT;
+            context.drawTextWithShadow(this.textRenderer, shopLabel(shop.name(), shop.depot()), left, y, 0xFFFFFFFF);
+            context.drawTextWithShadow(this.textRenderer, shopDetail(shop.depot(), shop.name(), shop.rows().size()),
+                left, y + 10, 0xFFAAAAAA);
+        }
+    }
+
+    private void renderMyShop(DrawContext context, int mouseX, int mouseY) {
+        int left = this.width / 2 - 170;
+        List<ShopRow> rows = myDepotRows();
+        String name = rows.isEmpty() ? "" : rows.get(0).shopName();
+        context.drawTextWithShadow(this.textRenderer, shopLabel(name, selectedMyDepot), left + 68, 76, 0xFFFFFFFF);
+        context.drawTextWithShadow(this.textRenderer, "Listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
+            ShopRow row = rows.get(i + scroll);
             int y = SHOP_LIST_TOP + i * ROW_HEIGHT;
             context.drawTextWithShadow(this.textRenderer,
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
-                left, y + 2, 0xFFFFFFFF);
+                left + ICON_WIDTH, y + 2, 0xFFFFFFFF);
+            drawItemRow(context, row.stack(), left, y + 2, mouseX, mouseY);
         }
     }
 
