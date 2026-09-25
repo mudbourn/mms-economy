@@ -47,7 +47,7 @@ public final class HubScreen extends Screen {
 
     private static final int MY_SHOPS_TOP = 110;
 
-    private static final int SHOP_LIST_TOP = 152;
+    private static final int SHOP_LIST_TOP = 164;
 
     private static final int SERVER_LIST_TOP = 134;
 
@@ -840,7 +840,7 @@ public final class HubScreen extends Screen {
                 ? selectedShop + " @ " + selectedDepot.getX() + ","
                     + selectedDepot.getY() + "," + selectedDepot.getZ()
                 : name + " (" + selectedShop + ")",
-            left + 68, 76, 0xFFFFFFFF);
+            left + 172, 76, 0xFFFFFFFF);
         if (rows.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
             return;
