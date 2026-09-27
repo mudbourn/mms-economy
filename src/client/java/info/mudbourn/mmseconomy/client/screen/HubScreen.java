@@ -166,7 +166,7 @@ public final class HubScreen extends Screen {
         return switch (target) {
             case MARKET -> data.mode() != MODE_BANKING;
             case BANK -> data.mode() == MODE_BANKING;
-            case SHOPS -> data.mode() == MODE_MERCHANT && data.nearDepot();
+            case SHOPS -> data.mode() != MODE_BANKING;
             case HISTORY -> true;
             case ADMIN -> data.admin();
         };
@@ -454,8 +454,13 @@ public final class HubScreen extends Screen {
         }
     }
 
+    // The Shops sub-view to show; away from a depot only the server shop is browsable.
+    private ShopView activeShopView() {
+        return data.nearDepot() ? shopView : ShopView.SERVER;
+    }
+
     private void initShops() {
-        switch (shopView) {
+        switch (activeShopView()) {
             case CREATE -> initShopCreate();
             case SERVER -> initServerShop();
             case MANAGE -> initShopManage();
@@ -567,11 +572,13 @@ public final class HubScreen extends Screen {
 
     private void initServerShop() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
-            this.shopView = ShopView.MANAGE;
-            this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 60, 20).build());
+        if (data.nearDepot()) {
+            addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+                this.shopView = ShopView.MANAGE;
+                this.scroll = 0;
+                clearAndInit();
+            }).dimensions(left, 70, 60, 20).build());
+        }
         ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b -> {
             this.serverShopBuy = true;
             this.scroll = 0;
@@ -604,13 +611,15 @@ public final class HubScreen extends Screen {
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ServerShopRow row = rows.get(i + scroll);
             String label = serverShopBuy ? "Buy" : "Sell";
-            addDrawableChild(ButtonWidget.builder(Text.literal(label), b -> {
+            ButtonWidget trade = ButtonWidget.builder(Text.literal(label), b -> {
                 if (serverShopBuy) {
                     ClientPlayNetworking.send(new EconomyNetworking.ServerBuy(row.itemId(), 1));
                 } else {
                     ClientPlayNetworking.send(new EconomyNetworking.ServerSell(row.itemId(), 1));
                 }
-            }).dimensions(left + 280, SERVER_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+            }).dimensions(left + 280, SERVER_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
+            trade.active = data.nearDepot();
+            addDrawableChild(trade);
         }
     }
 
@@ -638,7 +647,7 @@ public final class HubScreen extends Screen {
                 }
                 yield selectedDepot == null ? selectedOwnerShops().size() : selectedDepotRows().size();
             }
-            case SHOPS -> switch (shopView) {
+            case SHOPS -> switch (activeShopView()) {
                 case SERVER -> catalogRows().size();
                 case MANAGE -> selectedMyDepot == null ? myShops().size() : myDepotRows().size();
                 case CREATE -> 0;
@@ -881,12 +890,7 @@ public final class HubScreen extends Screen {
 
     private void renderShops(DrawContext context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
-        if (!data.nearDepot()) {
-            context.drawCenteredTextWithShadow(this.textRenderer,
-                "Stand near your 2x2 barrel depot to manage a shop.", this.width / 2, 96, 0xFFAAAAAA);
-            return;
-        }
-        switch (shopView) {
+        switch (activeShopView()) {
             case CREATE -> renderShopCreate(context);
             case SERVER -> renderServerShop(context);
             case MANAGE -> {
@@ -949,6 +953,10 @@ public final class HubScreen extends Screen {
         context.drawTextWithShadow(this.textRenderer,
             serverShopBuy ? "Buy from server (1.5x in stock, 3x minted)" : "Sell to server",
             left, 118, 0xFFFFE066);
+        if (!data.nearDepot()) {
+            context.drawTextWithShadow(this.textRenderer,
+                "Browse only. Stand at your own depot to trade.", left, this.height - 60, 0xFFAAAAAA);
+        }
         List<ServerShopRow> rows = catalogRows();
         if (rows.isEmpty()) {
             context.drawTextWithShadow(this.textRenderer,
