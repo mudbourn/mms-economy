@@ -3,6 +3,8 @@ package info.mudbourn.mmseconomy.network;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.economy.BankAccess;
 import info.mudbourn.mmseconomy.economy.BankOccupancy;
+import info.mudbourn.mmseconomy.economy.Chips;
+import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.Gems;
 import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.history.History;
@@ -190,14 +192,15 @@ public final class EconomyNetworking {
         }
     }
 
-    public record BankAction(boolean deposit, long amount) implements CustomPayload {
+    public record BankAction(boolean deposit, boolean chips, long amount) implements CustomPayload {
         public static final Id<BankAction> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bank_action"));
         public static final PacketCodec<RegistryByteBuf, BankAction> CODEC = PacketCodec.of(
             (value, buf) -> {
                 buf.writeBoolean(value.deposit);
+                buf.writeBoolean(value.chips);
                 buf.writeLong(value.amount);
             },
-            buf -> new BankAction(buf.readBoolean(), buf.readLong()));
+            buf -> new BankAction(buf.readBoolean(), buf.readBoolean(), buf.readLong()));
 
         @Override
         public Id<? extends CustomPayload> getId() {
@@ -555,7 +558,26 @@ public final class EconomyNetworking {
             return;
         }
 
-        if (action.deposit()) {
+        if (action.chips() && (!Chips.casinoLoaded() || amount % Chips.step() != 0)) {
+            player.sendMessage(
+                Text.literal("Chips come in multiples of " + Currency.format(Chips.step()) + "."),
+                false);
+            return;
+        }
+
+        if (action.chips() && action.deposit()) {
+            if (!Chips.removeExact(player, amount)) {
+                player.sendMessage(Text.literal("You lack chips worth exactly that amount."), false);
+                return;
+            }
+            Wallet.deposit(player, amount);
+        } else if (action.chips()) {
+            if (!Wallet.withdraw(player, amount)) {
+                player.sendMessage(Text.literal("Your balance is too low."), false);
+                return;
+            }
+            Chips.give(player, amount);
+        } else if (action.deposit()) {
             if (!Gems.removeExact(player, amount)) {
                 player.sendMessage(Text.literal("You lack gems worth exactly that amount."), false);
                 return;
@@ -574,9 +596,16 @@ public final class EconomyNetworking {
             new info.mudbourn.mmseconomy.history.HistoryEntry(
                 day, info.mudbourn.mmseconomy.history.HistoryCategory.PAYMENT, "", 0,
                 amount, 0L, action.deposit() ? amount : -amount,
-                action.deposit() ? "Bank deposit" : "Bank withdrawal"));
+                bankNote(action)));
 
         refresh(player);
+    }
+
+    private static String bankNote(BankAction action) {
+        if (action.chips()) {
+            return action.deposit() ? "Chips cashed" : "Chips bought";
+        }
+        return action.deposit() ? "Bank deposit" : "Bank withdrawal";
     }
 
     private static void handleClose(ServerPlayerEntity player) {

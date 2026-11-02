@@ -1,6 +1,7 @@
 package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
+import info.mudbourn.mmseconomy.economy.Chips;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
@@ -28,6 +29,12 @@ public final class ModItemGroups {
                 entries.add(ModBlocks.PICE_BLOCK);
                 entries.add(ModBlocks.BANK);
                 entries.add(ModItems.SHOP_BOOK);
+                if (Chips.casinoLoaded()) {
+                    entries.add(ModItems.CHIP_10);
+                    entries.add(ModItems.CHIP_20);
+                    entries.add(ModItems.CHIP_50);
+                    entries.add(ModItems.CHIP_100);
+                }
             })
             .build());
     }

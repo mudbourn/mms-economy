@@ -1,5 +1,6 @@
 package info.mudbourn.mmseconomy.client.screen;
 
+import info.mudbourn.mmseconomy.economy.Chips;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
@@ -278,14 +279,25 @@ public final class HubScreen extends Screen {
         setInitialFocus(bankField);
 
         boolean usable = data.hasBank() && !data.bankOccupiedByOther();
-        ButtonWidget deposit = ButtonWidget.builder(Text.literal("Deposit"), b -> sendBank(true))
+        ButtonWidget deposit = ButtonWidget.builder(Text.literal("Deposit"), b -> sendBank(true, false))
             .dimensions(centerX - 80, 122, 78, 20).build();
-        ButtonWidget withdraw = ButtonWidget.builder(Text.literal("Withdraw"), b -> sendBank(false))
+        ButtonWidget withdraw = ButtonWidget.builder(Text.literal("Withdraw"), b -> sendBank(false, false))
             .dimensions(centerX + 2, 122, 78, 20).build();
         deposit.active = usable;
         withdraw.active = usable;
         addDrawableChild(deposit);
         addDrawableChild(withdraw);
+
+        if (Chips.casinoLoaded()) {
+            ButtonWidget cashChips = ButtonWidget.builder(Text.literal("Cash chips"), b -> sendBank(true, true))
+                .dimensions(centerX - 80, 146, 78, 20).build();
+            ButtonWidget buyChips = ButtonWidget.builder(Text.literal("Buy chips"), b -> sendBank(false, true))
+                .dimensions(centerX + 2, 146, 78, 20).build();
+            cashChips.active = usable;
+            buyChips.active = usable;
+            addDrawableChild(cashChips);
+            addDrawableChild(buyChips);
+        }
     }
 
     // The market listings grouped by owner, ordered by owner name.
@@ -675,12 +687,12 @@ public final class HubScreen extends Screen {
         return true;
     }
 
-    private void sendBank(boolean deposit) {
+    private void sendBank(boolean deposit, boolean chips) {
         long amount = Currency.parse(bankField.getText());
         if (amount <= 0) {
             return;
         }
-        ClientPlayNetworking.send(new EconomyNetworking.BankAction(deposit, amount));
+        ClientPlayNetworking.send(new EconomyNetworking.BankAction(deposit, chips, amount));
     }
 
     @Override

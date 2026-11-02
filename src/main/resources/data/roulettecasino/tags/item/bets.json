@@ -1,0 +1,9 @@
+{
+  "replace": true,
+  "values": [
+    "mms_economy:chip_10",
+    "mms_economy:chip_20",
+    "mms_economy:chip_50",
+    "mms_economy:chip_100"
+  ]
+}

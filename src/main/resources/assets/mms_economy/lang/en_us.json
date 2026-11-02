@@ -4,6 +4,10 @@
   "item.mms_economy.pice": "Pice",
   "item.mms_economy.colt": "Colt",
   "item.mms_economy.shop_book": "Shop Book",
+  "item.mms_economy.chip_10": "10 Colt Chip",
+  "item.mms_economy.chip_20": "20 Colt Chip",
+  "item.mms_economy.chip_50": "50 Colt Chip",
+  "item.mms_economy.chip_100": "100 Colt Chip",
 
   "block.mms_economy.pice_block": "Block of Pice",
   "block.mms_economy.colt_block": "Block of Colt",

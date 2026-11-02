@@ -9,7 +9,7 @@ import net.minecraft.util.Identifier;
 
 import java.util.function.Function;
 
-// Registers the mod's gem currency items and the shop book.
+// Registers the mod's gem currency items, casino chips and the shop book.
 public final class ModItems {
 
     public static Item PICE;
@@ -18,10 +18,22 @@ public final class ModItems {
 
     public static Item SHOP_BOOK;
 
+    public static Item CHIP_10;
+
+    public static Item CHIP_20;
+
+    public static Item CHIP_50;
+
+    public static Item CHIP_100;
+
     public static void register() {
         PICE = register("pice", Item::new, new Item.Settings());
         COLT = register("colt", Item::new, new Item.Settings());
         SHOP_BOOK = register("shop_book", Item::new, new Item.Settings().maxCount(1));
+        CHIP_10 = register("chip_10", Item::new, new Item.Settings());
+        CHIP_20 = register("chip_20", Item::new, new Item.Settings());
+        CHIP_50 = register("chip_50", Item::new, new Item.Settings());
+        CHIP_100 = register("chip_100", Item::new, new Item.Settings());
     }
 
     private static Item register(String name, Function<Item.Settings, Item> factory,
