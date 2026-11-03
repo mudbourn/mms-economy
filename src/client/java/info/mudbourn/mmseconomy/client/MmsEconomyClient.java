@@ -15,13 +15,16 @@ import org.lwjgl.glfw.GLFW;
 
 public class MmsEconomyClient implements ClientModInitializer {
 
+    // The hub keybind, also used by open screens to close themselves.
+    public static KeyBinding openHub;
+
     @Override
     public void onInitializeClient() {
         WalletHud.register();
 
         KeyBinding.Category category = KeyBinding.Category.create(
             Identifier.of(MmsEconomy.MOD_ID, "economy"));
-        KeyBinding openHub = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        openHub = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.mms_economy.open_hub",
             InputUtil.Type.KEYSYM,
             GLFW.GLFW_KEY_SEMICOLON,

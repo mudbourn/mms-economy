@@ -11,6 +11,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.state.StateManager;
 import net.minecraft.state.property.BooleanProperty;
 import net.minecraft.state.property.Properties;
+import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
@@ -59,7 +60,8 @@ public class BankBlock extends HorizontalFacingBlock {
                 serverPlayer,
                 info.mudbourn.mmseconomy.MmsEconomy.config().bankRange);
             if (bank == null) {
-                return ActionResult.PASS;
+                serverPlayer.sendMessage(Text.literal("Stand directly in front of the bank's face to use it."), true);
+                return ActionResult.SUCCESS;
             }
             EconomyNetworking.openHub(serverPlayer, bank);
         }

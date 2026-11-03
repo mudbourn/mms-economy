@@ -18,12 +18,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import info.mudbourn.mmseconomy.client.MmsEconomyClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 // The economy hub: a tab row over a balance header, opened by /eco or a bank block.
@@ -904,7 +908,7 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         switch (activeShopView()) {
             case CREATE -> renderShopCreate(context);
-            case SERVER -> renderServerShop(context);
+            case SERVER -> renderServerShop(context, mouseX, mouseY);
             case MANAGE -> {
                 if (selectedMyDepot == null) {
                     renderMyShopList(context);
@@ -960,7 +964,13 @@ public final class HubScreen extends Screen {
             "Opening a new wall costs a one-time setup fee.", left, 158, 0xFFAAAAAA);
     }
 
-    private void renderServerShop(DrawContext context) {
+    // Builds a display stack for a server shop item id, empty when the id is unknown.
+    private static ItemStack catalogStack(String itemId) {
+        Identifier id = Identifier.tryParse(itemId);
+        return id == null ? ItemStack.EMPTY : new ItemStack(Registries.ITEM.get(id));
+    }
+
+    private void renderServerShop(DrawContext context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         context.drawTextWithShadow(this.textRenderer,
             serverShopBuy ? "Buy from server (1.5x in stock, 3x minted)" : "Sell to server",
@@ -980,11 +990,12 @@ public final class HubScreen extends Screen {
             int y = SERVER_LIST_TOP + i * ROW_HEIGHT;
             long price = serverShopBuy ? row.buyPrice() : row.sell();
             context.drawTextWithShadow(this.textRenderer,
-                row.name() + "  " + Currency.format(price), left, y, 0xFFFFFFFF);
+                row.name() + "  " + Currency.format(price), left + ICON_WIDTH, y, 0xFFFFFFFF);
             String detail = serverShopBuy
                 ? (row.stock() > 0 ? "in stock " + row.stock() : "minted to order")
                 : "server pays " + Currency.format(row.sell());
-            context.drawTextWithShadow(this.textRenderer, detail, left, y + 10, 0xFFAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, detail, left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+            drawItemRow(context, catalogStack(row.itemId()), left, y, mouseX, mouseY);
         }
     }
 
@@ -992,6 +1003,15 @@ public final class HubScreen extends Screen {
     public void close() {
         ClientPlayNetworking.send(new EconomyNetworking.CloseHub());
         super.close();
+    }
+
+    @Override
+    public boolean keyPressed(KeyInput input) {
+        if (!(this.getFocused() instanceof TextFieldWidget) && MmsEconomyClient.openHub.matchesKey(input)) {
+            this.close();
+            return true;
+        }
+        return super.keyPressed(input);
     }
 
     @Override

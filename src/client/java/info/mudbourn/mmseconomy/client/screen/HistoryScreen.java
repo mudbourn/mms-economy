@@ -3,9 +3,12 @@ package info.mudbourn.mmseconomy.client.screen;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import info.mudbourn.mmseconomy.client.MmsEconomyClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
 
 import java.util.List;
@@ -104,6 +107,15 @@ public final class HistoryScreen extends Screen {
         int max = Math.max(0, current().size() - 1);
         scroll = Math.max(0, Math.min(max, scroll - (int) Math.signum(verticalAmount)));
         return true;
+    }
+
+    @Override
+    public boolean keyPressed(KeyInput input) {
+        if (!(this.getFocused() instanceof TextFieldWidget) && MmsEconomyClient.openHub.matchesKey(input)) {
+            this.close();
+            return true;
+        }
+        return super.keyPressed(input);
     }
 
     @Override
