@@ -290,7 +290,7 @@ public final class Marketplace {
         player.sendMessage(Text.literal("Sold " + sold + " for " + Currency.format(unit * sold) + "."), false);
     }
 
-    // Buys count of a catalog item from the server, drawing from library stock at 1.5x and minting the rest at 3x.
+    // Buys count of a catalog item from the server, drawing from library stock first and minting the rest.
     public static void serverBuy(ServerPlayerEntity player, String itemId, int count) {
         if (!DebugAccess.has(player) && !atOwnDepot(player)) {
             player.sendMessage(Text.literal("Stand at your own shop depot to trade with the server."), false);
@@ -311,8 +311,8 @@ public final class Marketplace {
         info.mudbourn.mmseconomy.economy.ServerLibrary library =
             info.mudbourn.mmseconomy.economy.ServerLibrary.get(server);
         long budget = Wallet.balance(player);
-        long stockPrice = ServerBuyList.stockBuyPrice(sell);
-        long mintPrice = ServerBuyList.mintBuyPrice(sell);
+        long stockPrice = ServerBuyList.stockBuyPrice(itemId, sell);
+        long mintPrice = ServerBuyList.mintBuyPrice(itemId, sell);
         long fromStock = Math.min(Math.min(count, library.count(itemId)), budget / stockPrice);
         budget -= fromStock * stockPrice;
         long minted = Math.min(count - fromStock, budget / mintPrice);

@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import info.mudbourn.mmseconomy.MmsEconomy;
+import info.mudbourn.mmseconomy.economy.Chips;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -35,15 +36,27 @@ public final class ServerBuyList {
         Path path = filePath();
         if (!Files.exists(path)) {
             entries = new LinkedHashMap<>();
+            seedChips();
             save();
             return;
         }
         try {
             entries = parse(Files.readString(path));
+            seedChips();
             save();
         } catch (IOException e) {
             MmsEconomy.LOGGER.error("Failed to read {}", FILE_NAME, e);
             entries = new LinkedHashMap<>();
+        }
+    }
+
+    // Lists each casino chip at its face value when the casino is installed, keeping any admin override.
+    private static void seedChips() {
+        if (!Chips.casinoLoaded()) {
+            return;
+        }
+        for (Map.Entry<String, Long> chip : Chips.faceValues().entrySet()) {
+            entries.putIfAbsent(chip.getKey(), new Entry(chip.getValue(), ServerShopCategory.VALUABLE));
         }
     }
 
@@ -84,14 +97,14 @@ public final class ServerBuyList {
         return entries.containsKey(itemId);
     }
 
-    // The price a buyer pays for an in-stock unit: 1.5x the sell price, rounded up.
-    public static long stockBuyPrice(long sell) {
-        return (sell * 3 + 1) / 2;
+    // The price a buyer pays for an in-stock unit: 1.5x the sell price rounded up, or face value for a chip.
+    public static long stockBuyPrice(String itemId, long sell) {
+        return Chips.isChip(itemId) ? sell : (sell * 3 + 1) / 2;
     }
 
-    // The price a buyer pays for a minted unit when the library is out of stock: 3x the sell price.
-    public static long mintBuyPrice(long sell) {
-        return sell * 3;
+    // The price a buyer pays for a minted unit when out of stock: 3x the sell price, or face value for a chip.
+    public static long mintBuyPrice(String itemId, long sell) {
+        return Chips.isChip(itemId) ? sell : sell * 3;
     }
 
     public static Map<String, Entry> all() {

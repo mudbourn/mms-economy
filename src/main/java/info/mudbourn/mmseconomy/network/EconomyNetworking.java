@@ -495,8 +495,8 @@ public final class EconomyNetworking {
             long sell = entry.getValue().sell();
             long stock = shelf.count(id);
             long buyPrice = stock > 0
-                ? ServerBuyList.stockBuyPrice(sell)
-                : ServerBuyList.mintBuyPrice(sell);
+                ? ServerBuyList.stockBuyPrice(id, sell)
+                : ServerBuyList.mintBuyPrice(id, sell);
             shopCatalog.add(new ServerShopRow(id, Marketplace.displayName(id), sell, buyPrice,
                 (int) Math.min(Integer.MAX_VALUE, stock), entry.getValue().category().ordinal()));
         }

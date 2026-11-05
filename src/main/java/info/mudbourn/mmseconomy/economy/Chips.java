@@ -4,7 +4,11 @@ import info.mudbourn.mmseconomy.registry.ModItems;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 // Converts casino chip stacks to and from a Pice value; a chip is worth its face value in Colt.
 public final class Chips {
@@ -23,6 +27,20 @@ public final class Chips {
 
     private static Item[] items() {
         return new Item[] {ModItems.CHIP_100, ModItems.CHIP_50, ModItems.CHIP_20, ModItems.CHIP_10};
+    }
+
+    // Each chip's item id mapped to its face value in Pice, largest first.
+    public static Map<String, Long> faceValues() {
+        Item[] items = items();
+        Map<String, Long> values = new LinkedHashMap<>();
+        for (int i = 0; i < FACES.length; i++) {
+            values.put(Registries.ITEM.getId(items[i]).toString(), FACES[i] * Currency.ratio());
+        }
+        return values;
+    }
+
+    public static boolean isChip(String itemId) {
+        return faceValues().containsKey(itemId);
     }
 
     // The Pice value of the smallest chip; chip amounts must be a multiple of it.
