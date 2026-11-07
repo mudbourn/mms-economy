@@ -2,9 +2,12 @@ package info.mudbourn.mmseconomy.economy;
 
 import info.mudbourn.mmseconomy.registry.ModBlocks;
 import info.mudbourn.mmseconomy.registry.ModItems;
+import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
+
+import java.util.List;
 
 // Converts physical gem stacks to and from a Pice value, largest denomination first.
 public final class Gems {
@@ -132,6 +135,40 @@ public final class Gems {
     public static void giveChange(ServerPlayerEntity player, long amount) {
         long remaining = grant(player, ModItems.COLT, amount, Currency.ratio());
         grant(player, ModItems.PICE, remaining, 1L);
+    }
+
+    // Puts amount into the barrels as Colt and Pice gems, returning the value that did not fit.
+    public static long stockBarrels(List<Inventory> barrels, long amount) {
+        long ratio = Currency.ratio();
+        long colt = amount / ratio;
+        long leftColt = fill(barrels, ModItems.COLT, colt);
+        long leftPice = fill(barrels, ModItems.PICE, amount % ratio);
+        return leftColt * ratio + leftPice;
+    }
+
+    // Inserts count of item into the barrels, topping up matching stacks before empty slots, and returns what did not fit.
+    private static long fill(List<Inventory> barrels, Item item, long count) {
+        long remaining = count;
+        for (boolean empties : new boolean[] {false, true}) {
+            for (Inventory barrel : barrels) {
+                for (int slot = 0; slot < barrel.size() && remaining > 0; slot++) {
+                    ItemStack stack = barrel.getStack(slot);
+                    if (!empties && stack.isOf(item)) {
+                        int add = (int) Math.min(remaining, stack.getMaxCount() - stack.getCount());
+                        stack.increment(add);
+                        remaining -= add;
+                    } else if (empties && stack.isEmpty()) {
+                        ItemStack fresh = new ItemStack(item);
+                        int add = (int) Math.min(remaining, fresh.getMaxCount());
+                        fresh.setCount(add);
+                        barrel.setStack(slot, fresh);
+                        remaining -= add;
+                    }
+                }
+                barrel.markDirty();
+            }
+        }
+        return remaining;
     }
 
     private static long grant(ServerPlayerEntity player, Item item, long remaining, long unit) {

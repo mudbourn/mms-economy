@@ -84,6 +84,7 @@ public final class Billing {
         for (Debt debt : new ArrayList<>(state.debts)) {
             collect(server, state, debt);
         }
+        Bonds.payVaults(server, state);
         state.markDirty();
     }
 
@@ -97,6 +98,7 @@ public final class Billing {
                 collect(server, state, debt);
             }
         }
+        Bonds.payVaults(server, state);
         state.markDirty();
 
         long owed = owedBy(state, id);
@@ -152,9 +154,9 @@ public final class Billing {
 
         String payerName = payer.getName().getString();
         long day = History.currentDay(payer);
-        History.log(payer, new HistoryEntry(day, HistoryCategory.PAYMENT, "", 0,
+        History.log(payer, new HistoryEntry(day, HistoryCategory.BILL, "", 0,
             settlement.gross(), settlement.tax(), -settlement.gross(), payeeName + " (" + label + ")"));
-        HistoryEntry received = new HistoryEntry(day, HistoryCategory.PAYMENT, "", 0,
+        HistoryEntry received = new HistoryEntry(day, HistoryCategory.BILL, "", 0,
             settlement.gross(), settlement.tax(), settlement.net(), payerName + " (" + label + ")");
         payer.sendMessage(Text.literal("Bill " + label + ": paid " + payeeName + " "
             + Currency.format(settlement.gross()) + " (tax " + Currency.format(settlement.tax()) + ")."), false);

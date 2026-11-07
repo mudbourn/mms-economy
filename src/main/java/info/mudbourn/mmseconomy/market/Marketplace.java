@@ -14,6 +14,7 @@ import info.mudbourn.mmseconomy.history.HistoryEntry;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -200,12 +201,15 @@ public final class Marketplace {
         if (tax > 0) {
             Treasury.get(server).credit(tax);
         }
-        if (owner != null) {
-            Wallet.deposit(owner, settlement.net());
-        }
 
         takeOne(barrels, listing);
         deliver(buyer, template);
+        long unbanked = Gems.value(template.getItem()) > 0
+            ? settlement.net()
+            : Gems.stockBarrels(barrels, settlement.net());
+        if (owner != null && unbanked > 0) {
+            Wallet.deposit(owner, unbanked);
+        }
 
         long day = History.currentDay(buyer);
         String name = template.getName().getString();
@@ -217,7 +221,7 @@ public final class Marketplace {
             History.log(owner, ownerEntry);
         } else {
             info.mudbourn.mmseconomy.economy.PendingPayouts.get(server)
-                .record(listing.owner(), settlement.net(), ownerEntry);
+                .record(listing.owner(), unbanked, ownerEntry);
         }
 
         buyer.sendMessage(Text.literal("Bought " + name + " for " + Currency.format(settlement.gross())
@@ -244,16 +248,35 @@ public final class Marketplace {
         return distance <= (double) ownerRange * ownerRange;
     }
 
-    // A shop owner reaches their own depot within shopMarketRange horizontally and shopVerticalRange up or down.
-    public static boolean ownsReachableDepot(ServerPlayerEntity player) {
+    // The player's own listed depot nearest to them within shop reach in this dimension, or null.
+    public static BlockPos reachableOwnDepot(ServerPlayerEntity player) {
         ServerWorld world = player.getEntityWorld();
         String dimension = world.getRegistryKey().getValue().toString();
         int horizontal = MmsEconomy.config().shopMarketRange;
         int vertical = MmsEconomy.config().shopVerticalRange;
-        return Market.get(world.getServer()).all().stream().anyMatch(listing ->
-            listing.owner().equals(player.getUuid())
-                && listing.dimension().equals(dimension)
-                && Depot.withinReach(player, listing.depot(), horizontal, vertical));
+        BlockPos best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (ShopListing listing : Market.get(world.getServer()).all()) {
+            if (!listing.owner().equals(player.getUuid())
+                || !listing.dimension().equals(dimension)
+                || !Depot.withinReach(player, listing.depot(), horizontal, vertical)) {
+                continue;
+            }
+            double distance = player.squaredDistanceTo(
+                listing.depot().getX() + 0.5,
+                listing.depot().getY() + 0.5,
+                listing.depot().getZ() + 0.5);
+            if (distance < bestDistance) {
+                best = listing.depot();
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    // A shop owner reaches their own depot within shopMarketRange horizontally and shopVerticalRange up or down.
+    public static boolean ownsReachableDepot(ServerPlayerEntity player) {
+        return reachableOwnDepot(player) != null;
     }
 
     // True when the player is at their own reachable shop or standing at a depot that is theirs or unclaimed.
@@ -421,7 +444,11 @@ public final class Marketplace {
 
     public static Item itemOf(String itemId) {
         Identifier id = Identifier.tryParse(itemId);
-        return id != null ? Registries.ITEM.get(id) : null;
+        if (id == null || !Registries.ITEM.containsId(id)) {
+            return null;
+        }
+        Item item = Registries.ITEM.get(id);
+        return item == Items.AIR ? null : item;
     }
 
     public static String displayName(String itemId) {

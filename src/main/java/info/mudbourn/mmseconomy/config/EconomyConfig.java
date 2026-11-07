@@ -24,11 +24,14 @@ public final class EconomyConfig {
     // Whether /pay is available to players.
     public boolean payEnabled = true;
 
-    // Whether /deal is available to players.
+    // Whether wholesale deals are available to players.
     public boolean dealEnabled = true;
 
-    // Ticks a pending deal survives before it times out (1200 = 60 seconds).
+    // Ticks a pending bill or loan request survives before it times out (1200 = 60 seconds).
     public int dealTimeoutTicks = 1200;
+
+    // In-game days a wholesale order may wait for the seller before it expires and refunds.
+    public int wholesaleOrderDays = 3;
 
     // Whether the marketplace tabs and listings are active.
     public boolean marketEnabled = true;
@@ -66,7 +69,7 @@ public final class EconomyConfig {
     // Tax on /pay, in basis points (500 = 5%).
     public int taxPayBps = 500;
 
-    // Tax on each currency leg of a /deal, in basis points.
+    // Tax on the money of each wholesale delivery, in basis points.
     public int taxDealBps = 500;
 
     // Tax on a player-to-player market purchase, in basis points.
@@ -97,6 +100,7 @@ public final class EconomyConfig {
         "payEnabled",
         "dealEnabled",
         "dealTimeoutTicks",
+        "wholesaleOrderDays",
         "marketEnabled",
         "walletHudEnabled",
         "piceToColtRatio",
@@ -127,6 +131,7 @@ public final class EconomyConfig {
                 case "payEnabled" -> this.payEnabled = Boolean.parseBoolean(value);
                 case "dealEnabled" -> this.dealEnabled = Boolean.parseBoolean(value);
                 case "dealTimeoutTicks" -> this.dealTimeoutTicks = Integer.parseInt(value);
+                case "wholesaleOrderDays" -> this.wholesaleOrderDays = Integer.parseInt(value);
                 case "marketEnabled" -> this.marketEnabled = Boolean.parseBoolean(value);
                 case "walletHudEnabled" -> this.walletHudEnabled = Boolean.parseBoolean(value);
                 case "piceToColtRatio" -> this.piceToColtRatio = Integer.parseInt(value);
@@ -165,6 +170,7 @@ public final class EconomyConfig {
             + ", payEnabled=" + payEnabled
             + ", dealEnabled=" + dealEnabled
             + ", dealTimeoutTicks=" + dealTimeoutTicks
+            + ", wholesaleOrderDays=" + wholesaleOrderDays
             + ", marketEnabled=" + marketEnabled
             + ", walletHudEnabled=" + walletHudEnabled
             + ", piceToColtRatio=" + piceToColtRatio

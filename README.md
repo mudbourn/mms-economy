@@ -3,7 +3,7 @@
 A standalone Fabric mod for Minecraft 1.21.11 (Java 21) that adds a two-tier gem
 currency to MMSLive01: a virtual per-player wallet, physical Pice and Colt gems,
 a bank, transaction taxes into a server treasury, player-to-player payments and
-deals, a barrel-backed marketplace, and a transaction-history ledger.
+wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.
 
 ## Currency
 
@@ -16,8 +16,12 @@ deals, a barrel-backed marketplace, and a transaction-history ledger.
 ## Commands
 
 - `/pay <player> <amount>`: taxed transfer between online players.
-- `/deal <player>`, `/deal offer <amount>`, `/deal confirm`, `/deal cancel`,
-  `/deal info`: a dual-confirm currency trade with a timeout.
+- `/deal offers`, `/deal list`, `/deal add <lotSize> <price>` (held item),
+  `/deal remove <id>`, `/deal order <offerId> <lots>`, `/deal accept|decline|cancel <id>`:
+  wholesale trade between depot owners. The Deals tab of the depot menu does
+  the same and also takes requests against regular shop listings. The buyer's
+  money is escrowed until the seller accepts, the goods travel until the next
+  in-game day, then land in the buyer's depot and the seller is paid.
 - `/eco balance [player]`, `/eco deposit|withdraw <amount>` (at a bank),
   `/eco history`, `/eco market [buy <index>]`, `/eco shop list <price>|unlist
   <index>`, `/eco sell <count>` (server-sell at a bank).

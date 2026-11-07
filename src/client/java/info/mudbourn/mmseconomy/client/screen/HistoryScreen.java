@@ -24,27 +24,35 @@ public final class HistoryScreen extends Screen {
 
     private final List<HistoryEntry> deals;
 
+    private final List<HistoryEntry> bills;
+
     private HistoryCategory tab = HistoryCategory.PURCHASE;
 
     private int scroll;
 
-    public HistoryScreen(List<HistoryEntry> purchases, List<HistoryEntry> payments, List<HistoryEntry> deals) {
+    public HistoryScreen(List<HistoryEntry> purchases,
+                         List<HistoryEntry> payments,
+                         List<HistoryEntry> deals,
+                         List<HistoryEntry> bills) {
         super(Text.literal("Transaction History"));
         this.purchases = purchases;
         this.payments = payments;
         this.deals = deals;
+        this.bills = bills;
     }
 
     @Override
     protected void init() {
         int tabWidth = 90;
-        int startX = this.width / 2 - tabWidth * 3 / 2 - tabWidth / 2;
+        int startX = this.width / 2 - (tabWidth * 4 + 12) / 2;
         addDrawableChild(ButtonWidget.builder(Text.literal("Purchases"), b -> select(HistoryCategory.PURCHASE))
             .dimensions(startX, 28, tabWidth, 20).build());
         addDrawableChild(ButtonWidget.builder(Text.literal("Payments"), b -> select(HistoryCategory.PAYMENT))
             .dimensions(startX + tabWidth + 4, 28, tabWidth, 20).build());
         addDrawableChild(ButtonWidget.builder(Text.literal("Deals"), b -> select(HistoryCategory.DEAL))
             .dimensions(startX + (tabWidth + 4) * 2, 28, tabWidth, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Bills"), b -> select(HistoryCategory.BILL))
+            .dimensions(startX + (tabWidth + 4) * 3, 28, tabWidth, 20).build());
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
             .dimensions(this.width / 2 - 100, this.height - 28, 200, 20).build());
     }
@@ -59,6 +67,7 @@ public final class HistoryScreen extends Screen {
             case PURCHASE -> purchases;
             case PAYMENT -> payments;
             case DEAL -> deals;
+            case BILL -> bills;
         };
     }
 

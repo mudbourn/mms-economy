@@ -41,18 +41,7 @@ public final class EconomyCommand {
                 .then(CommandManager.argument("amount", StringArgumentType.word())
                     .executes(EconomyCommand::pay))));
 
-        dispatcher.register(CommandManager.literal("deal")
-            .then(CommandManager.argument("player", EntityArgumentType.player())
-                .executes(EconomyCommand::dealOpen))
-            .then(CommandManager.literal("offer")
-                .then(CommandManager.argument("amount", StringArgumentType.word())
-                    .executes(EconomyCommand::dealOffer)))
-            .then(CommandManager.literal("confirm")
-                .executes(context -> dealSimple(context, 0)))
-            .then(CommandManager.literal("cancel")
-                .executes(context -> dealSimple(context, 1)))
-            .then(CommandManager.literal("info")
-                .executes(context -> dealSimple(context, 2))));
+        DealCommand.register(dispatcher);
 
         LendingCommand.register(dispatcher);
 
@@ -401,44 +390,6 @@ public final class EconomyCommand {
             return 0;
         }
         source.sendFeedback(() -> Text.literal("Set " + key + " = " + value + "."), true);
-        return 1;
-    }
-
-    private static int dealOpen(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        if (!MmsEconomy.config().dealEnabled) {
-            source.sendError(Text.literal("Deals are disabled."));
-            return 0;
-        }
-        ServerPlayerEntity initiator = source.getPlayerOrThrow();
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
-        if (initiator == target) {
-            source.sendError(Text.literal("You cannot deal with yourself."));
-            return 0;
-        }
-        info.mudbourn.mmseconomy.deal.DealManager.open(initiator, target);
-        return 1;
-    }
-
-    private static int dealOffer(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        long amount = Currency.parse(StringArgumentType.getString(context, "amount"));
-        if (amount < 0) {
-            source.sendError(Text.literal("Enter an amount like 12.34 or a whole number of Pice."));
-            return 0;
-        }
-        info.mudbourn.mmseconomy.deal.DealManager.offer(source.getPlayerOrThrow(), amount);
-        return 1;
-    }
-
-    private static int dealSimple(CommandContext<ServerCommandSource> context, int op)
-            throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
-        switch (op) {
-            case 0 -> info.mudbourn.mmseconomy.deal.DealManager.confirm(player);
-            case 1 -> info.mudbourn.mmseconomy.deal.DealManager.cancel(player);
-            default -> info.mudbourn.mmseconomy.deal.DealManager.info(player);
-        }
         return 1;
     }
 

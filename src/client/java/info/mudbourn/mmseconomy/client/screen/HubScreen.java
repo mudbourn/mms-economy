@@ -5,11 +5,17 @@ import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
+import info.mudbourn.mmseconomy.economy.BondPaper;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.BondOfferingRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.LibraryRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.MarketRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.OpenHub;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.ServerShopRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.ShopRow;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.VaultBondRow;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.WholesaleOfferRow;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.WholesaleOrderRow;
+import info.mudbourn.mmseconomy.registry.ModItems;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,6 +43,8 @@ public final class HubScreen extends Screen {
         MARKET,
         BANK,
         SHOPS,
+        DEALS,
+        BONDS,
         HISTORY,
         ADMIN
     }
@@ -115,6 +123,8 @@ public final class HubScreen extends Screen {
 
     private List<HistoryEntry> historyDeals = List.of();
 
+    private List<HistoryEntry> historyBills = List.of();
+
     private HistoryCategory historyTab = HistoryCategory.PURCHASE;
 
     private boolean historyLoaded;
@@ -124,6 +134,31 @@ public final class HubScreen extends Screen {
     private TextFieldWidget priceField;
 
     private TextFieldWidget nameField;
+
+    // The Deals-tab field contents, kept across redraws.
+    private String dealLotSize = "";
+
+    private String dealLotPrice = "";
+
+    private String dealQuantity = "";
+
+    private String dealTotal = "";
+
+    private static final int DEALS_TOP = 126;
+
+    // What a Deals-tab row shows.
+    private enum DealKind {
+        HEADER,
+        MINE,
+        OFFER,
+        LISTING,
+        ORDER
+    }
+
+    // One Deals-tab row: a section header, a wholesale offer, a shop listing, or an order.
+    private record DealLine(DealKind kind, String text, WholesaleOfferRow offer, MarketRow listing,
+                            WholesaleOrderRow order) {
+    }
 
     // The owner grouping of the current snapshot's listings, rebuilt only when the snapshot changes.
     private List<Map.Entry<String, List<MarketRow>>> shopGroupsCache;
@@ -172,6 +207,8 @@ public final class HubScreen extends Screen {
             case MARKET -> data.mode() != MODE_BANKING;
             case BANK -> data.mode() == MODE_BANKING;
             case SHOPS -> data.mode() != MODE_BANKING;
+            case DEALS -> data.mode() == MODE_MERCHANT;
+            case BONDS -> data.mode() == MODE_BANKING;
             case HISTORY -> true;
             case ADMIN -> data.admin();
         };
@@ -182,13 +219,16 @@ public final class HubScreen extends Screen {
             case MARKET -> "Market";
             case BANK -> "Bank";
             case SHOPS -> "Shops";
+            case DEALS -> "Deals";
+            case BONDS -> "Bonds";
             case HISTORY -> "History";
             case ADMIN -> "Admin";
         };
     }
 
     public void applyHistory(List<HistoryEntry> purchases, List<HistoryEntry> payments,
-                             List<HistoryEntry> deals) {
+                             List<HistoryEntry> deals, List<HistoryEntry> bills) {
+        this.historyBills = bills;
         this.historyPurchases = purchases;
         this.historyPayments = payments;
         this.historyDeals = deals;
@@ -203,6 +243,7 @@ public final class HubScreen extends Screen {
             case PURCHASE -> historyPurchases;
             case PAYMENT -> historyPayments;
             case DEAL -> historyDeals;
+            case BILL -> historyBills;
         };
     }
 
@@ -230,6 +271,8 @@ public final class HubScreen extends Screen {
             case BANK -> initBank();
             case MARKET -> initMarket();
             case SHOPS -> initShops();
+            case DEALS -> initDeals();
+            case BONDS -> initBonds();
             case HISTORY -> initHistory();
             case ADMIN -> initAdmin();
         }
@@ -243,10 +286,11 @@ public final class HubScreen extends Screen {
             ClientPlayNetworking.send(new EconomyNetworking.RequestHistory());
         }
         int width = 90;
-        int startX = this.width / 2 - width * 3 / 2 - 4;
+        int startX = this.width / 2 - (width * 4 + 12) / 2;
         addHistoryTab("Purchases", HistoryCategory.PURCHASE, startX, width);
         addHistoryTab("Payments", HistoryCategory.PAYMENT, startX + width + 4, width);
         addHistoryTab("Deals", HistoryCategory.DEAL, startX + (width + 4) * 2, width);
+        addHistoryTab("Bills", HistoryCategory.BILL, startX + (width + 4) * 3, width);
     }
 
     private void addHistoryTab(String label, HistoryCategory target, int x, int width) {
@@ -631,6 +675,235 @@ public final class HubScreen extends Screen {
         }
     }
 
+    // The Deals rows: own offers, then everything browsable, then orders, each under a header.
+    private List<DealLine> dealLines() {
+        List<DealLine> lines = new ArrayList<>();
+        lines.add(new DealLine(DealKind.HEADER, "My wholesale offers", null, null, null));
+        for (WholesaleOfferRow offer : data.wholesaleOffers()) {
+            if (offer.own()) {
+                lines.add(new DealLine(DealKind.MINE, "", offer, null, null));
+            }
+        }
+        lines.add(new DealLine(DealKind.HEADER, "Browse", null, null, null));
+        for (WholesaleOfferRow offer : data.wholesaleOffers()) {
+            if (!offer.own()) {
+                lines.add(new DealLine(DealKind.OFFER, "", offer, null, null));
+            }
+        }
+        java.util.Set<Integer> mine = new java.util.HashSet<>();
+        for (ShopRow row : data.myListings()) {
+            mine.add(row.index());
+        }
+        for (MarketRow row : data.listings()) {
+            if (!mine.contains(row.index())) {
+                lines.add(new DealLine(DealKind.LISTING, "", null, row, null));
+            }
+        }
+        lines.add(new DealLine(DealKind.HEADER, "Orders", null, null, null));
+        for (WholesaleOrderRow order : data.wholesaleOrders()) {
+            lines.add(new DealLine(DealKind.ORDER, "", null, null, order));
+        }
+        return lines;
+    }
+
+    private static int parseCount(String text) {
+        try {
+            return Integer.parseInt(text.strip());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private TextFieldWidget dealField(int x, int y, int width, String hint, String value,
+                                      java.util.function.Consumer<String> sink) {
+        TextFieldWidget field = new TextFieldWidget(this.textRenderer, x, y, width, 20, Text.literal(hint));
+        field.setPlaceholder(Text.literal(hint));
+        field.setText(value);
+        field.setChangedListener(sink);
+        addDrawableChild(field);
+        return field;
+    }
+
+    private void initDeals() {
+        int left = this.width / 2 - 170;
+        dealField(left, 70, 56, "Lot size", dealLotSize, text -> dealLotSize = text);
+        dealField(left + 60, 70, 80, "Price/lot", dealLotPrice, text -> dealLotPrice = text);
+        ButtonWidget add = ButtonWidget.builder(Text.literal("Add offer (held)"), b -> {
+            int lotSize = parseCount(dealLotSize);
+            long price = Currency.parse(dealLotPrice);
+            if (lotSize > 0 && price > 0) {
+                ClientPlayNetworking.send(new EconomyNetworking.WholesaleAdd(lotSize, price));
+            }
+        }).dimensions(left + 144, 70, 110, 20).build();
+        add.active = data.wholesale();
+        addDrawableChild(add);
+        dealField(left, 94, 56, "Lots/qty", dealQuantity, text -> dealQuantity = text);
+        dealField(left + 60, 94, 80, "Total", dealTotal, text -> dealTotal = text);
+
+        List<DealLine> lines = dealLines();
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < lines.size(); i++) {
+            DealLine line = lines.get(i + scroll);
+            int y = DEALS_TOP + i * ROW_HEIGHT - 4;
+            switch (line.kind()) {
+                case MINE -> addDealButton("Remove", left + 280, y, 60, () ->
+                    ClientPlayNetworking.send(new EconomyNetworking.WholesaleRemove(line.offer().id())));
+                case OFFER -> addDealButton("Order", left + 280, y, 60, () -> {
+                    int lots = parseCount(dealQuantity);
+                    if (lots > 0) {
+                        ClientPlayNetworking.send(new EconomyNetworking.WholesaleOrderOffer(line.offer().id(), lots));
+                    }
+                });
+                case LISTING -> addDealButton("Request", left + 270, y, 70, () -> {
+                    int quantity = parseCount(dealQuantity);
+                    long total = dealTotal.isBlank()
+                        ? line.listing().price() * quantity
+                        : Currency.parse(dealTotal);
+                    if (quantity > 0 && total > 0) {
+                        MarketRow row = line.listing();
+                        ClientPlayNetworking.send(new EconomyNetworking.WholesaleRequest(
+                            row.ownerId(),
+                            new BlockPos(row.x(), row.y(), row.z()),
+                            row.dimension(),
+                            row.stack(),
+                            quantity,
+                            total));
+                    }
+                });
+                case ORDER -> initOrderButtons(line.order(), left, y);
+                case HEADER -> {
+                }
+            }
+        }
+    }
+
+    private void initOrderButtons(WholesaleOrderRow order, int left, int y) {
+        if (order.inTransit()) {
+            return;
+        }
+        if (order.incoming()) {
+            addDealButton("Accept", left + 218, y, 58, () -> ClientPlayNetworking.send(
+                new EconomyNetworking.WholesaleRespond(order.id(), EconomyNetworking.WholesaleRespond.ACCEPT)));
+            addDealButton("Decline", left + 280, y, 60, () -> ClientPlayNetworking.send(
+                new EconomyNetworking.WholesaleRespond(order.id(), EconomyNetworking.WholesaleRespond.DECLINE)));
+        } else {
+            addDealButton("Cancel", left + 280, y, 60, () -> ClientPlayNetworking.send(
+                new EconomyNetworking.WholesaleRespond(order.id(), EconomyNetworking.WholesaleRespond.CANCEL)));
+        }
+    }
+
+    private void addDealButton(String label, int x, int y, int width, Runnable action) {
+        ButtonWidget button = ButtonWidget.builder(Text.literal(label), b -> action.run())
+            .dimensions(x, y, width, 20).build();
+        button.active = data.wholesale();
+        addDrawableChild(button);
+    }
+
+    private void renderDeals(DrawContext context, int mouseX, int mouseY) {
+        int left = this.width / 2 - 170;
+        context.drawTextWithShadow(this.textRenderer,
+            "Set lots (or quantity) and an optional total, then Order or Request.",
+            left + 148, 100, 0xFFAAAAAA);
+        List<DealLine> lines = dealLines();
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < lines.size(); i++) {
+            DealLine line = lines.get(i + scroll);
+            int y = DEALS_TOP + i * ROW_HEIGHT;
+            String first = "";
+            String second = "";
+            ItemStack icon = ItemStack.EMPTY;
+            switch (line.kind()) {
+                case HEADER -> context.drawTextWithShadow(this.textRenderer, line.text(), left, y + 4, 0xFFFFE066);
+                case MINE, OFFER -> {
+                    WholesaleOfferRow offer = line.offer();
+                    icon = offer.stack();
+                    first = offer.name() + "  x" + offer.lotSize() + " per lot  " + Currency.format(offer.lotPrice());
+                    second = line.kind() == DealKind.MINE ? "your offer" : "by " + offer.seller();
+                }
+                case LISTING -> {
+                    MarketRow row = line.listing();
+                    icon = row.stack();
+                    first = row.name() + "  " + Currency.format(row.price()) + " each";
+                    second = "shop of " + row.owner() + " (request a quantity)";
+                }
+                case ORDER -> {
+                    WholesaleOrderRow order = line.order();
+                    icon = order.stack();
+                    first = (order.incoming() ? "From " : "To ") + order.other() + ": "
+                        + order.items() + " x " + order.name();
+                    second = Currency.format(order.escrow()) + "  "
+                        + (order.inTransit()
+                            ? "in transit, " + order.remaining() + " left"
+                            : order.incoming() ? "awaiting your answer" : "awaiting seller");
+                }
+            }
+            if (line.kind() != DealKind.HEADER) {
+                context.drawTextWithShadow(this.textRenderer,
+                    this.textRenderer.trimToWidth(first, 190), left + ICON_WIDTH, y, 0xFFFFFFFF);
+                context.drawTextWithShadow(this.textRenderer,
+                    this.textRenderer.trimToWidth(second, 190), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+                drawItemRow(context, icon, left, y, mouseX, mouseY);
+            }
+        }
+        if (!data.wholesale()) {
+            context.drawTextWithShadow(this.textRenderer,
+                "Stand at a depot you own to trade wholesale.", left, this.height - 60, 0xFFAAAAAA);
+        }
+    }
+
+    private void initBonds() {
+        int left = this.width / 2 - 170;
+        int offerings = data.offerings().size();
+        int total = offerings + data.vault().size();
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < total; i++) {
+            int row = i + scroll;
+            int y = LIST_TOP + i * ROW_HEIGHT - 4;
+            if (row < offerings) {
+                BondOfferingRow offering = data.offerings().get(row);
+                ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b ->
+                        ClientPlayNetworking.send(new EconomyNetworking.BondBuy(offering.id())))
+                    .dimensions(left + 280, y, 60, 20).build();
+                buy.active = data.balance() >= offering.principal();
+                addDrawableChild(buy);
+            } else {
+                VaultBondRow held = data.vault().get(row - offerings);
+                addDrawableChild(ButtonWidget.builder(Text.literal("Take out"), b ->
+                        ClientPlayNetworking.send(new EconomyNetworking.BondWithdraw(held.index())))
+                    .dimensions(left + 280, y, 60, 20).build());
+            }
+        }
+    }
+
+    private void renderBonds(DrawContext context, int mouseX, int mouseY) {
+        int left = this.width / 2 - 170;
+        int offerings = data.offerings().size();
+        int total = offerings + data.vault().size();
+        if (total == 0) {
+            context.drawTextWithShadow(this.textRenderer,
+                "No bonds on offer and none in your vault.", left, LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        ItemStack icon = new ItemStack(ModItems.BOND);
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < total; i++) {
+            int row = i + scroll;
+            int y = LIST_TOP + i * ROW_HEIGHT;
+            if (row < offerings) {
+                BondOfferingRow offering = data.offerings().get(row);
+                context.drawTextWithShadow(this.textRenderer,
+                    "Treasury  " + Currency.format(offering.principal()) + "  "
+                        + BondPaper.percent(offering.couponBps()) + " every " + offering.couponDays() + " days",
+                    left + ICON_WIDTH, y, 0xFFFFFFFF);
+                context.drawTextWithShadow(this.textRenderer,
+                    "term " + offering.termDays() + " days, " + offering.remaining() + " left",
+                    left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+            } else {
+                VaultBondRow held = data.vault().get(row - offerings);
+                context.drawTextWithShadow(this.textRenderer, "Vaulted", left + ICON_WIDTH, y, 0xFFFFE066);
+                context.drawTextWithShadow(this.textRenderer,
+                    this.textRenderer.trimToWidth(held.text(), 210), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+            }
+            drawItemRow(context, icon, left, y, mouseX, mouseY);
+        }
+    }
+
     // The number of rows the active view can scroll through.
     private int scrollableTotal() {
         return switch (tab) {
@@ -645,6 +918,8 @@ public final class HubScreen extends Screen {
                 case MANAGE -> selectedMyDepot == null ? myShops().size() : myDepotRows().size();
                 case CREATE -> 0;
             };
+            case DEALS -> dealLines().size();
+            case BONDS -> data.offerings().size() + data.vault().size();
             case HISTORY -> historyRows().size();
             case ADMIN -> data.library().size();
             case BANK -> 0;
@@ -687,6 +962,8 @@ public final class HubScreen extends Screen {
             case BANK -> renderBank(context);
             case MARKET -> renderMarket(context, mouseX, mouseY);
             case SHOPS -> renderShops(context, mouseX, mouseY);
+            case DEALS -> renderDeals(context, mouseX, mouseY);
+            case BONDS -> renderBonds(context, mouseX, mouseY);
             case HISTORY -> renderHistory(context);
             case ADMIN -> renderAdmin(context);
         }

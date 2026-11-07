@@ -10,6 +10,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 // Bond lifecycle: issue, coupon and maturity payments into the bond, debt collection and redemption.
@@ -40,7 +41,8 @@ public final class Bonds {
             day + couponDays,
             0L,
             0L,
-            false);
+            false,
+            "");
         state.bonds.add(bond);
         state.markDirty();
         return bond;
@@ -93,11 +95,12 @@ public final class Bonds {
         return drawn;
     }
 
-    // Pays the holder what the bond has accrued, taxing interest only, and closes a repaid matured bond.
-    public static void redeem(ServerPlayerEntity player, ItemStack stack) {
+    // Deposits the paper into the player's bank vault when at a bank, otherwise redeems it in hand.
+    public static void use(ServerPlayerEntity player, ItemStack stack) {
         MinecraftServer server = player.getEntityWorld().getServer();
         String id = BondPaper.read(stack);
         if (server == null || id == null) {
+            player.sendMessage(Text.literal("This paper is blank; buy bonds with /bond buy."), false);
             return;
         }
 
@@ -107,7 +110,94 @@ public final class Bonds {
             player.sendMessage(Text.literal("This bond is not recognised or is already closed."), false);
             return;
         }
+        if (!bond.vault.isEmpty()) {
+            player.sendMessage(Text.literal("This bond is held in a bank vault and this paper is void."), false);
+            return;
+        }
 
+        if (atBank(player)) {
+            bond.vault = player.getUuid().toString();
+            stack.decrement(1);
+            state.markDirty();
+            player.sendMessage(Text.literal("Bond stored in your bank. Payments now go to your wallet."), false);
+            settleVaulted(player, state, bond);
+            return;
+        }
+        if (payOut(player, state, bond)) {
+            stack.decrement(1);
+        }
+    }
+
+    // Pays every vaulted bond the online owner holds, closing those that are fully repaid.
+    public static void payVaults(MinecraftServer server, Obligations state) {
+        for (Bond bond : new ArrayList<>(state.bonds)) {
+            if (bond.vault.isEmpty()) {
+                continue;
+            }
+            ServerPlayerEntity owner = server.getPlayerManager().getPlayer(UUID.fromString(bond.vault));
+            if (owner != null) {
+                settleVaulted(owner, state, bond);
+            }
+        }
+    }
+
+    // The bonds held in the player's bank vault, in storage order.
+    public static List<Bond> vaulted(Obligations state, ServerPlayerEntity player) {
+        String id = player.getUuid().toString();
+        return state.bonds.stream()
+            .filter(bond -> bond.vault.equals(id))
+            .toList();
+    }
+
+    // Takes a vaulted bond back out as paper, at a bank.
+    public static void withdraw(ServerPlayerEntity player, int index) {
+        MinecraftServer server = player.getEntityWorld().getServer();
+        if (server == null) {
+            return;
+        }
+        if (!atBank(player)) {
+            player.sendMessage(Text.literal("Stand at a bank to take bonds out of your vault."), false);
+            return;
+        }
+        Obligations state = Obligations.get(server);
+        List<Bond> held = vaulted(state, player);
+        if (index < 1 || index > held.size()) {
+            player.sendMessage(Text.literal("No such bond in your vault."), false);
+            return;
+        }
+        Bond bond = held.get(index - 1);
+        bond.vault = "";
+        state.markDirty();
+        give(player, bond);
+        player.sendMessage(Text.literal("Took the " + bond.issuerName + " bond out of your vault."), false);
+    }
+
+    // A one-line summary of a bond for vault listings.
+    public static String describe(Obligations state, Bond bond) {
+        return bond.issuerName + " " + Currency.format(bond.principal) + " at "
+            + BondPaper.percent(bond.couponBps) + ", matures day " + bond.maturityDay + "; "
+            + status(state, bond);
+    }
+
+    private static boolean atBank(ServerPlayerEntity player) {
+        return DebugAccess.has(player)
+            || BankAccess.nearestBank(player, MmsEconomy.config().bankRange) != null;
+    }
+
+    private static void settleVaulted(ServerPlayerEntity owner, Obligations state, Bond bond) {
+        if (bond.accrued() == 0 && !closable(state, bond)) {
+            return;
+        }
+        payOut(owner, state, bond);
+    }
+
+    private static boolean closable(Obligations state, Bond bond) {
+        return bond.matured && bond.accrued() == 0 && !state.hasDebtFor(bond);
+    }
+
+    // Pays the holder what the bond has accrued, taxing interest only, and returns true when it closed.
+    private static boolean payOut(ServerPlayerEntity player, Obligations state, Bond bond) {
+        MinecraftServer server = player.getEntityWorld().getServer();
         long headroom = headroom(player);
         long principal = Math.min(bond.accruedPrincipal, headroom);
         long interest = interestWithin(bond.accruedInterest, headroom - principal);
@@ -131,13 +221,16 @@ public final class Bonds {
         }
 
         state.markDirty();
-        if (bond.matured && bond.accrued() == 0 && !state.hasDebtFor(bond)) {
+        if (closable(state, bond)) {
             state.bonds.remove(bond);
-            stack.decrement(1);
-            player.sendMessage(Text.literal("The bond has matured and is fully repaid. It is now closed."), false);
-            return;
+            player.sendMessage(Text.literal("The " + bond.issuerName
+                + " bond has matured and is fully repaid. It is now closed."), false);
+            return true;
         }
-        player.sendMessage(Text.literal(status(state, bond)), false);
+        if (bond.vault.isEmpty()) {
+            player.sendMessage(Text.literal("Bond status: " + status(state, bond)), false);
+        }
+        return false;
     }
 
     // Wallet room left under the balance cap, or the long maximum when there is no cap.
@@ -169,7 +262,7 @@ public final class Bonds {
         String next = bond.matured
             ? "matured, awaiting repayment"
             : "next coupon day " + Math.min(bond.nextCoupon, bond.maturityDay);
-        return "Bond status: accrued " + Currency.format(bond.accrued())
+        return "accrued " + Currency.format(bond.accrued())
             + ", issuer debt " + Currency.format(debt) + ", " + next + ".";
     }
 

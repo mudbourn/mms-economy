@@ -10,7 +10,7 @@ import info.mudbourn.mmseconomy.registry.ModItems;
 import info.mudbourn.mmseconomy.registry.ModSounds;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import info.mudbourn.mmseconomy.deal.DealManager;
+import info.mudbourn.mmseconomy.deal.WholesaleManager;
 import info.mudbourn.mmseconomy.market.Marketplace;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -54,7 +54,7 @@ public class MmsEconomy implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTED.register(BankOccupancy::scrubOnLoad);
 
-        ServerTickEvents.END_SERVER_TICK.register(DealManager::tickAll);
+        ServerTickEvents.END_SERVER_TICK.register(WholesaleManager::tick);
 
         ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.BankInterest::tick);
 

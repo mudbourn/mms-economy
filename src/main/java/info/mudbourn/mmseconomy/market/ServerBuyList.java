@@ -36,13 +36,12 @@ public final class ServerBuyList {
         Path path = filePath();
         if (!Files.exists(path)) {
             entries = new LinkedHashMap<>();
-            seedChips();
             save();
             return;
         }
         try {
             entries = parse(Files.readString(path));
-            seedChips();
+            dropChips();
             save();
         } catch (IOException e) {
             MmsEconomy.LOGGER.error("Failed to read {}", FILE_NAME, e);
@@ -50,14 +49,9 @@ public final class ServerBuyList {
         }
     }
 
-    // Lists each casino chip at its face value when the casino is installed, keeping any admin override.
-    private static void seedChips() {
-        if (!Chips.casinoLoaded()) {
-            return;
-        }
-        for (Map.Entry<String, Long> chip : Chips.faceValues().entrySet()) {
-            entries.putIfAbsent(chip.getKey(), new Entry(chip.getValue(), ServerShopCategory.VALUABLE));
-        }
+    // Keeps casino chips out of the server shop; they are exchanged at the bank instead.
+    private static void dropChips() {
+        entries.keySet().removeIf(Chips::isChip);
     }
 
     // Reads either the legacy id-to-number map or the id-to-object map, defaulting a missing category to VALUABLE.

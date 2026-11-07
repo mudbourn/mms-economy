@@ -3,6 +3,7 @@ package info.mudbourn.mmseconomy.market;
 import net.minecraft.block.entity.BarrelBlockEntity;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.inventory.Inventory;
+import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.BlockHitResult;
@@ -136,6 +137,64 @@ public final class Depot {
             found.add((BarrelBlockEntity) world.getBlockEntity(pos));
         }
         return found;
+    }
+
+    // How many items equal to the template the barrels hold.
+    public static int count(List<Inventory> barrels, ItemStack template) {
+        int total = 0;
+        for (Inventory barrel : barrels) {
+            for (int slot = 0; slot < barrel.size(); slot++) {
+                ItemStack stack = barrel.getStack(slot);
+                if (ItemStack.areItemsAndComponentsEqual(stack, template)) {
+                    total += stack.getCount();
+                }
+            }
+        }
+        return total;
+    }
+
+    // Removes up to count items equal to the template from the barrels, returning how many were taken.
+    public static int take(List<Inventory> barrels, ItemStack template, int count) {
+        int left = count;
+        for (Inventory barrel : barrels) {
+            for (int slot = 0; slot < barrel.size() && left > 0; slot++) {
+                ItemStack stack = barrel.getStack(slot);
+                if (ItemStack.areItemsAndComponentsEqual(stack, template)) {
+                    int took = Math.min(left, stack.getCount());
+                    stack.decrement(took);
+                    left -= took;
+                }
+            }
+            barrel.markDirty();
+        }
+        return count - left;
+    }
+
+    // Inserts up to count items equal to the template, topping up matching stacks before using empty slots, returning how many fit.
+    public static int insert(List<Inventory> barrels, ItemStack template, int count) {
+        int left = count;
+        for (boolean useEmpty : new boolean[] {false, true}) {
+            for (Inventory barrel : barrels) {
+                int limit = Math.min(template.getMaxCount(), barrel.getMaxCountPerStack());
+                for (int slot = 0; slot < barrel.size() && left > 0; slot++) {
+                    ItemStack stack = barrel.getStack(slot);
+                    if (useEmpty && stack.isEmpty()) {
+                        int put = Math.min(limit, left);
+                        barrel.setStack(slot, template.copyWithCount(put));
+                        left -= put;
+                    } else if (!useEmpty
+                        && !stack.isEmpty()
+                        && ItemStack.areItemsAndComponentsEqual(stack, template)
+                        && stack.getCount() < limit) {
+                        int put = Math.min(limit - stack.getCount(), left);
+                        stack.increment(put);
+                        left -= put;
+                    }
+                }
+                barrel.markDirty();
+            }
+        }
+        return count - left;
     }
 
     // True when the block at pos is one of the four barrels of the depot anchored here.

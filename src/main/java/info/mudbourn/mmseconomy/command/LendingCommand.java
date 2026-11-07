@@ -10,8 +10,10 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import info.mudbourn.mmseconomy.deal.OfferManager;
 import info.mudbourn.mmseconomy.economy.Bill;
 import info.mudbourn.mmseconomy.economy.Billing;
+import info.mudbourn.mmseconomy.economy.Bond;
 import info.mudbourn.mmseconomy.economy.BondOffering;
 import info.mudbourn.mmseconomy.economy.BondPaper;
+import info.mudbourn.mmseconomy.economy.Bonds;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.Debt;
 import info.mudbourn.mmseconomy.economy.Obligations;
@@ -85,6 +87,15 @@ public final class LendingCommand {
                     .executes(context -> {
                         TreasuryBonds.buy(context.getSource().getPlayerOrThrow(),
                             IntegerArgumentType.getInteger(context, "offering"));
+                        return 1;
+                    })))
+            .then(CommandManager.literal("vault")
+                .executes(LendingCommand::bondVault))
+            .then(CommandManager.literal("withdraw")
+                .then(CommandManager.argument("index", IntegerArgumentType.integer(1))
+                    .executes(context -> {
+                        Bonds.withdraw(context.getSource().getPlayerOrThrow(),
+                            IntegerArgumentType.getInteger(context, "index"));
                         return 1;
                     }))));
 
@@ -246,6 +257,21 @@ public final class LendingCommand {
             IntegerArgumentType.getInteger(context, "couponDays"),
             IntegerArgumentType.getInteger(context, "termDays"),
             bps(DoubleArgumentType.getDouble(context, "lateRatePercent")));
+        return 1;
+    }
+
+    private static int bondVault(CommandContext<ServerCommandSource> context)
+            throws CommandSyntaxException {
+        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
+        Obligations state = Obligations.get(context.getSource().getServer());
+        List<Bond> held = Bonds.vaulted(state, player);
+        if (held.isEmpty()) {
+            player.sendMessage(Text.literal("Your bank vault holds no bonds."), false);
+            return 1;
+        }
+        for (int i = 0; i < held.size(); i++) {
+            player.sendMessage(Text.literal((i + 1) + ". " + Bonds.describe(state, held.get(i))), false);
+        }
         return 1;
     }
 

@@ -19,7 +19,8 @@ public final class Bond {
         Codec.LONG.fieldOf("nextCoupon").forGetter(bond -> bond.nextCoupon),
         Codec.LONG.fieldOf("accruedInterest").forGetter(bond -> bond.accruedInterest),
         Codec.LONG.fieldOf("accruedPrincipal").forGetter(bond -> bond.accruedPrincipal),
-        Codec.BOOL.fieldOf("matured").forGetter(bond -> bond.matured)
+        Codec.BOOL.fieldOf("matured").forGetter(bond -> bond.matured),
+        Codec.STRING.optionalFieldOf("vault", "").forGetter(bond -> bond.vault)
     ).apply(instance, Bond::new));
 
     public final String id;
@@ -49,9 +50,12 @@ public final class Bond {
 
     public boolean matured;
 
+    // The UUID of the player whose bank vault holds this bond, or empty while the paper is out.
+    public String vault;
+
     public Bond(String id, String issuer, String issuerName, long principal, int couponBps,
                 int couponDays, int lateBps, long issueDay, long maturityDay, long nextCoupon,
-                long accruedInterest, long accruedPrincipal, boolean matured) {
+                long accruedInterest, long accruedPrincipal, boolean matured, String vault) {
         this.id = id;
         this.issuer = issuer;
         this.issuerName = issuerName;
@@ -65,6 +69,7 @@ public final class Bond {
         this.accruedInterest = accruedInterest;
         this.accruedPrincipal = accruedPrincipal;
         this.matured = matured;
+        this.vault = vault;
     }
 
     public boolean byTreasury() {

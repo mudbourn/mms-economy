@@ -1,8 +1,9 @@
 package info.mudbourn.mmseconomy.history;
 
-// The three ledger tabs a transaction can be filed under.
+// The ledger tabs a transaction can be filed under.
 public enum HistoryCategory {
     PURCHASE,
     PAYMENT,
-    DEAL
+    DEAL,
+    BILL
 }

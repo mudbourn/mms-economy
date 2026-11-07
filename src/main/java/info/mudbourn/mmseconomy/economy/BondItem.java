@@ -7,7 +7,7 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.world.World;
 
-// The bond paper; using it redeems what the bond has accrued.
+// The bond paper; using it at a bank stores it in the vault, elsewhere it redeems what has accrued.
 public final class BondItem extends Item {
 
     public BondItem(Settings settings) {
@@ -17,7 +17,7 @@ public final class BondItem extends Item {
     @Override
     public ActionResult use(World world, PlayerEntity user, Hand hand) {
         if (!world.isClient() && user instanceof ServerPlayerEntity player) {
-            Bonds.redeem(player, player.getStackInHand(hand));
+            Bonds.use(player, player.getStackInHand(hand));
         }
         return ActionResult.SUCCESS;
     }

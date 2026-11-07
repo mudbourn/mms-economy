@@ -50,12 +50,17 @@ public class MmsEconomyClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(EconomyNetworking.OpenHistory.ID, (payload, context) ->
             context.client().execute(() -> {
                 if (context.client().currentScreen instanceof HubScreen hub) {
-                    hub.applyHistory(payload.purchases(), payload.payments(), payload.deals());
+                    hub.applyHistory(
+                        payload.purchases(),
+                        payload.payments(),
+                        payload.deals(),
+                        payload.bills());
                 } else {
                     context.client().setScreen(new HistoryScreen(
                         payload.purchases(),
                         payload.payments(),
-                        payload.deals()));
+                        payload.deals(),
+                        payload.bills()));
                 }
             }));
     }
