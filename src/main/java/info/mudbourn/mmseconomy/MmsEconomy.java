@@ -58,6 +58,10 @@ public class MmsEconomy implements ModInitializer {
 
         ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.BankInterest::tick);
 
+        ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.Billing::tick);
+
+        ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.deal.OfferManager::tickAll);
+
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
             BankOccupancy.release(handler.player.getEntityWorld(), handler.player));
 
@@ -76,6 +80,8 @@ public class MmsEconomy implements ModInitializer {
             player.sendMessage(Text.literal("Shop sales while away: +"
                 + info.mudbourn.mmseconomy.economy.Currency.format(owed)), false);
         });
+
+        ServerPlayConnectionEvents.JOIN.register(info.mudbourn.mmseconomy.economy.Billing::onJoin);
 
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
             if (world instanceof ServerWorld serverWorld

@@ -108,6 +108,32 @@ public final class Gems {
         grant(player, ModItems.PICE, remaining, 1L);
     }
 
+    // Takes carried gems covering amount with the least overpay, returning the value taken, or -1 when short.
+    public static long tender(ServerPlayerEntity player, long amount) {
+        long total = inventoryValue(player);
+        if (amount <= 0 || total < amount) {
+            return -1L;
+        }
+        long ratio = Currency.ratio();
+        long[] steps = {1L, ratio, BLOCK_UNITS * ratio};
+        for (long step : steps) {
+            long rounded = (amount + step - 1) / step * step;
+            if (rounded <= total && removeExact(player, rounded)) {
+                return rounded;
+            }
+        }
+        if (removeExact(player, total)) {
+            return total;
+        }
+        return -1L;
+    }
+
+    // Gives change as loose Colt and Pice gems, never storage blocks.
+    public static void giveChange(ServerPlayerEntity player, long amount) {
+        long remaining = grant(player, ModItems.COLT, amount, Currency.ratio());
+        grant(player, ModItems.PICE, remaining, 1L);
+    }
+
     private static long grant(ServerPlayerEntity player, Item item, long remaining, long unit) {
         long count = remaining / unit;
         while (count > 0) {

@@ -54,6 +54,8 @@ public final class EconomyCommand {
             .then(CommandManager.literal("info")
                 .executes(context -> dealSimple(context, 2))));
 
+        LendingCommand.register(dispatcher);
+
         dispatcher.register(CommandManager.literal("eco")
             .executes(EconomyCommand::openHub)
             .then(CommandManager.literal("balance")

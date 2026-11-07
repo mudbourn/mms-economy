@@ -29,6 +29,7 @@ public final class ModItemGroups {
                 entries.add(ModBlocks.PICE_BLOCK);
                 entries.add(ModBlocks.BANK);
                 entries.add(ModItems.SHOP_BOOK);
+                entries.add(ModItems.BOND);
                 if (Chips.casinoLoaded()) {
                     entries.add(ModItems.CHIP_10);
                     entries.add(ModItems.CHIP_20);

@@ -88,6 +88,25 @@ public final class ServerBuyList {
         return entry != null ? entry.sell() : 0L;
     }
 
+    // The price the server pays for one unit when the library already holds stock of it, or face value for a chip.
+    public static long sellPriceAt(String itemId, long stock) {
+        long base = priceOf(itemId);
+        long half = MmsEconomy.config().serverSellHalfStock;
+        if (half <= 0 || Chips.isChip(itemId)) {
+            return base;
+        }
+        return Math.max(1L, base * half / (half + Math.max(0L, stock)));
+    }
+
+    // The total the server pays for count units sold into a library holding stock, pricing each unit in turn.
+    public static long sellTotal(String itemId, long stock, long count) {
+        long total = 0L;
+        for (long i = 0; i < count; i++) {
+            total += sellPriceAt(itemId, stock + i);
+        }
+        return total;
+    }
+
     public static ServerShopCategory categoryOf(String itemId) {
         Entry entry = entries.get(itemId);
         return entry != null ? entry.category() : ServerShopCategory.VALUABLE;

@@ -236,7 +236,6 @@ public final class HubScreen extends Screen {
     }
 
     private void initAdmin() {
-        addScrollButtons(data.library().size());
     }
 
     private void initHistory() {
@@ -248,7 +247,6 @@ public final class HubScreen extends Screen {
         addHistoryTab("Purchases", HistoryCategory.PURCHASE, startX, width);
         addHistoryTab("Payments", HistoryCategory.PAYMENT, startX + width + 4, width);
         addHistoryTab("Deals", HistoryCategory.DEAL, startX + (width + 4) * 2, width);
-        addScrollButtons(historyRows().size());
     }
 
     private void addHistoryTab(String label, HistoryCategory target, int x, int width) {
@@ -410,7 +408,6 @@ public final class HubScreen extends Screen {
     private void initShopList() {
         int left = this.width / 2 - 170;
         List<Map.Entry<String, List<MarketRow>>> groups = shopGroups();
-        addScrollButtons(groups.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < groups.size(); i++) {
             String owner = groups.get(i + scroll).getKey();
             addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
@@ -436,7 +433,6 @@ public final class HubScreen extends Screen {
             }).dimensions(left + 240, 70, 100, 20).build());
 
         List<ShopEntry> shops = selectedOwnerShops();
-        addScrollButtons(shops.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             ShopEntry shop = shops.get(i + scroll);
             addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
@@ -459,7 +455,6 @@ public final class HubScreen extends Screen {
             .dimensions(left + 66, 70, 100, 20).build());
 
         List<MarketRow> rows = selectedDepotRows();
-        addScrollButtons(rows.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             MarketRow row = rows.get(i + scroll);
             ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b ->
@@ -505,7 +500,6 @@ public final class HubScreen extends Screen {
         }).dimensions(left + 106, 70, 100, 20).build());
 
         List<MyShop> shops = myShops();
-        addScrollButtons(shops.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             MyShop shop = shops.get(i + scroll);
             addDrawableChild(ButtonWidget.builder(Text.literal("Manage"), b -> {
@@ -544,7 +538,6 @@ public final class HubScreen extends Screen {
             }
         }).dimensions(left + 96, 124, 140, 20).build());
 
-        addScrollButtons(rows.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ShopRow row = rows.get(i + scroll);
             addDrawableChild(ButtonWidget.builder(Text.literal("Unlist"), b ->
@@ -623,7 +616,6 @@ public final class HubScreen extends Screen {
         }
 
         List<ServerShopRow> rows = catalogRows();
-        addScrollButtons(rows.size());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ServerShopRow row = rows.get(i + scroll);
             String label = serverShopBuy ? "Buy" : "Sell";
@@ -637,21 +629,6 @@ public final class HubScreen extends Screen {
             trade.active = data.nearDepot();
             addDrawableChild(trade);
         }
-    }
-
-    private void addScrollButtons(int total) {
-        if (total <= ROWS_VISIBLE) {
-            return;
-        }
-        int x = this.width / 2 + 150;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Up"), b -> {
-            scroll = Math.max(0, scroll - 1);
-            clearAndInit();
-        }).dimensions(x, 52, 30, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Dn"), b -> {
-            scroll = Math.min(total - ROWS_VISIBLE, scroll + 1);
-            clearAndInit();
-        }).dimensions(x + 32, 52, 30, 20).build());
     }
 
     // The number of rows the active view can scroll through.

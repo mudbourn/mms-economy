@@ -1,0 +1,294 @@
+package info.mudbourn.mmseconomy.command;
+
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import info.mudbourn.mmseconomy.deal.OfferManager;
+import info.mudbourn.mmseconomy.economy.Bill;
+import info.mudbourn.mmseconomy.economy.Billing;
+import info.mudbourn.mmseconomy.economy.BondOffering;
+import info.mudbourn.mmseconomy.economy.BondPaper;
+import info.mudbourn.mmseconomy.economy.Currency;
+import info.mudbourn.mmseconomy.economy.Debt;
+import info.mudbourn.mmseconomy.economy.Obligations;
+import info.mudbourn.mmseconomy.economy.TreasuryBonds;
+import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
+
+import java.util.List;
+
+// The /bill and /bond commands plus the admin /eco bond subtree.
+public final class LendingCommand {
+
+    private LendingCommand() {
+    }
+
+    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
+        dispatcher.register(CommandManager.literal("bill")
+            .then(CommandManager.literal("create")
+                .then(CommandManager.argument("player", EntityArgumentType.player())
+                    .then(CommandManager.argument("amount", StringArgumentType.word())
+                        .then(CommandManager.argument("intervalDays", IntegerArgumentType.integer(1, 3650))
+                            .then(CommandManager.argument("lateRatePercent", DoubleArgumentType.doubleArg(0, 10))
+                                .then(CommandManager.argument("label", StringArgumentType.greedyString())
+                                    .executes(LendingCommand::billCreate)))))))
+            .then(CommandManager.literal("pay")
+                .then(CommandManager.argument("player", EntityArgumentType.player())
+                    .then(CommandManager.argument("amount", StringArgumentType.word())
+                        .then(CommandManager.argument("intervalDays", IntegerArgumentType.integer(1, 3650))
+                            .then(CommandManager.literal("late")
+                                .then(CommandManager.argument("lateRatePercent", DoubleArgumentType.doubleArg(0, 10))
+                                    .then(CommandManager.argument("label", StringArgumentType.greedyString())
+                                        .executes(context -> billPay(context,
+                                            bps(DoubleArgumentType.getDouble(context, "lateRatePercent")))))))
+                            .then(CommandManager.argument("label", StringArgumentType.greedyString())
+                                .executes(context -> billPay(context, 0)))))))
+            .then(CommandManager.literal("accept")
+                .then(CommandManager.argument("id", IntegerArgumentType.integer(1))
+                    .executes(context -> {
+                        OfferManager.acceptBill(context.getSource().getPlayerOrThrow(),
+                            IntegerArgumentType.getInteger(context, "id"));
+                        return 1;
+                    })))
+            .then(CommandManager.literal("list")
+                .executes(LendingCommand::billList))
+            .then(CommandManager.literal("cancel")
+                .then(CommandManager.argument("id", IntegerArgumentType.integer(1))
+                    .executes(LendingCommand::billCancel))));
+
+        dispatcher.register(CommandManager.literal("bond")
+            .then(CommandManager.literal("offer")
+                .then(CommandManager.argument("lender", EntityArgumentType.player())
+                    .then(CommandManager.argument("principal", StringArgumentType.word())
+                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 10))
+                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 3650))
+                                .then(CommandManager.argument("termDays", IntegerArgumentType.integer(1, 36500))
+                                    .then(CommandManager.argument("lateRatePercent",
+                                            DoubleArgumentType.doubleArg(0, 10))
+                                        .executes(LendingCommand::bondOffer))))))))
+            .then(CommandManager.literal("accept")
+                .executes(context -> {
+                    OfferManager.acceptBond(context.getSource().getPlayerOrThrow());
+                    return 1;
+                }))
+            .then(CommandManager.literal("market")
+                .executes(LendingCommand::bondMarket))
+            .then(CommandManager.literal("buy")
+                .then(CommandManager.argument("offering", IntegerArgumentType.integer(1))
+                    .executes(context -> {
+                        TreasuryBonds.buy(context.getSource().getPlayerOrThrow(),
+                            IntegerArgumentType.getInteger(context, "offering"));
+                        return 1;
+                    }))));
+
+        LiteralArgumentBuilder<ServerCommandSource> admin = CommandManager.literal("eco")
+            .then(CommandManager.literal("bond")
+                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+                .then(CommandManager.literal("issue")
+                    .then(CommandManager.argument("principal", StringArgumentType.word())
+                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 10))
+                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 3650))
+                                .then(CommandManager.argument("termDays", IntegerArgumentType.integer(1, 36500))
+                                    .then(CommandManager.argument("count", IntegerArgumentType.integer(1, 10000))
+                                        .executes(LendingCommand::bondIssue)))))))
+                .then(CommandManager.literal("list")
+                    .executes(LendingCommand::bondMarket))
+                .then(CommandManager.literal("cancel")
+                    .then(CommandManager.argument("offering", IntegerArgumentType.integer(1))
+                        .executes(LendingCommand::bondCancel))));
+        dispatcher.register(admin);
+    }
+
+    private static int bps(double percent) {
+        return (int) Math.round(percent * 100.0);
+    }
+
+    private static long amount(ServerCommandSource source, String text) {
+        long pice = Currency.parse(text);
+        if (pice <= 0) {
+            source.sendError(Text.literal("Enter an amount like 12.34 or a whole number of Pice."));
+        }
+        return pice;
+    }
+
+    private static int billCreate(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity payee = source.getPlayerOrThrow();
+        ServerPlayerEntity payer = EntityArgumentType.getPlayer(context, "player");
+        long amount = amount(source, StringArgumentType.getString(context, "amount"));
+        if (amount <= 0) {
+            return 0;
+        }
+        if (payee == payer) {
+            source.sendError(Text.literal("You cannot bill yourself."));
+            return 0;
+        }
+
+        OfferManager.offerBill(
+            payee,
+            payer,
+            amount,
+            IntegerArgumentType.getInteger(context, "intervalDays"),
+            bps(DoubleArgumentType.getDouble(context, "lateRatePercent")),
+            StringArgumentType.getString(context, "label"));
+        return 1;
+    }
+
+    private static int billPay(CommandContext<ServerCommandSource> context, int lateBps)
+            throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity payer = source.getPlayerOrThrow();
+        ServerPlayerEntity payee = EntityArgumentType.getPlayer(context, "player");
+        long amount = amount(source, StringArgumentType.getString(context, "amount"));
+        if (amount <= 0) {
+            return 0;
+        }
+        if (payee == payer) {
+            source.sendError(Text.literal("You cannot pay yourself."));
+            return 0;
+        }
+
+        Bill bill = Billing.create(
+            source.getServer(),
+            payer,
+            payee.getUuid(),
+            payee.getName().getString(),
+            amount,
+            IntegerArgumentType.getInteger(context, "intervalDays"),
+            lateBps,
+            StringArgumentType.getString(context, "label"));
+        payer.sendMessage(Text.literal("Bill " + bill.id + " started: " + Currency.format(amount)
+            + " to " + bill.payeeName + " every " + bill.intervalDays + " days, first due day "
+            + bill.nextDue + "."), false);
+        payee.sendMessage(Text.literal(bill.payerName + " will pay you " + Currency.format(amount)
+            + " every " + bill.intervalDays + " days (" + bill.label + ")."), false);
+        return 1;
+    }
+
+    private static int billList(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        String me = player.getUuid().toString();
+        Obligations state = Obligations.get(source.getServer());
+
+        boolean any = false;
+        for (Bill bill : state.bills) {
+            boolean paying = bill.payer.equals(me);
+            if (!paying && !bill.payee.equals(me)) {
+                continue;
+            }
+            any = true;
+            String other = paying ? "you pay " + bill.payeeName : bill.payerName + " pays you";
+            source.sendFeedback(() -> Text.literal("Bill " + bill.id + ": " + other + " "
+                + Currency.format(bill.amount) + " every " + bill.intervalDays + " days, next due day "
+                + bill.nextDue + " (" + bill.label + ")"), false);
+        }
+        for (Debt debt : state.debts) {
+            boolean owing = debt.payer.equals(me);
+            if (!owing && !debt.payee.equals(me)) {
+                continue;
+            }
+            any = true;
+            String who = owing ? "you owe " + debt.payeeName : debt.payerName + " owes you";
+            source.sendFeedback(() -> Text.literal("Debt: " + who + " " + Currency.format(debt.amount)
+                + " for " + debt.label + ", late rate " + BondPaper.percent(debt.lateBps) + " per day"), false);
+        }
+        if (!any) {
+            source.sendFeedback(() -> Text.literal("You have no bills or debts."), false);
+        }
+        return 1;
+    }
+
+    private static int billCancel(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        Obligations state = Obligations.get(source.getServer());
+        Bill bill = state.bill(IntegerArgumentType.getInteger(context, "id"));
+        String me = player.getUuid().toString();
+        if (bill == null || (!bill.payer.equals(me) && !bill.payee.equals(me))) {
+            source.sendError(Text.literal("You have no such bill."));
+            return 0;
+        }
+
+        state.bills.remove(bill);
+        state.markDirty();
+        source.sendFeedback(() -> Text.literal("Bill " + bill.id + " cancelled. Any debt stays owed."), false);
+        Billing.tell(source.getServer(), bill.payer.equals(me) ? bill.payee : bill.payer,
+            player.getName().getString() + " cancelled bill " + bill.id + " (" + bill.label + ").");
+        return 1;
+    }
+
+    private static int bondOffer(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity borrower = source.getPlayerOrThrow();
+        ServerPlayerEntity lender = EntityArgumentType.getPlayer(context, "lender");
+        long principal = amount(source, StringArgumentType.getString(context, "principal"));
+        if (principal <= 0) {
+            return 0;
+        }
+        if (borrower == lender) {
+            source.sendError(Text.literal("You cannot borrow from yourself."));
+            return 0;
+        }
+
+        OfferManager.offerBond(
+            borrower,
+            lender,
+            principal,
+            bps(DoubleArgumentType.getDouble(context, "ratePercent")),
+            IntegerArgumentType.getInteger(context, "couponDays"),
+            IntegerArgumentType.getInteger(context, "termDays"),
+            bps(DoubleArgumentType.getDouble(context, "lateRatePercent")));
+        return 1;
+    }
+
+    private static int bondMarket(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource source = context.getSource();
+        List<String> lines = TreasuryBonds.describe(source.getServer());
+        if (lines.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("No Treasury bonds are on offer."), false);
+            return 1;
+        }
+        for (String line : lines) {
+            source.sendFeedback(() -> Text.literal(line), false);
+        }
+        return 1;
+    }
+
+    private static int bondIssue(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource source = context.getSource();
+        long principal = amount(source, StringArgumentType.getString(context, "principal"));
+        if (principal <= 0) {
+            return 0;
+        }
+
+        BondOffering offering = TreasuryBonds.issue(
+            source.getServer(),
+            principal,
+            bps(DoubleArgumentType.getDouble(context, "ratePercent")),
+            IntegerArgumentType.getInteger(context, "couponDays"),
+            IntegerArgumentType.getInteger(context, "termDays"),
+            IntegerArgumentType.getInteger(context, "count"));
+        source.sendFeedback(() -> Text.literal("Created bond offering " + offering.id + " of "
+            + offering.remaining + " bonds."), true);
+        return 1;
+    }
+
+    private static int bondCancel(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource source = context.getSource();
+        int id = IntegerArgumentType.getInteger(context, "offering");
+        if (!TreasuryBonds.cancel(source.getServer(), id)) {
+            source.sendError(Text.literal("No bond offering " + id + "."));
+            return 0;
+        }
+        source.sendFeedback(() -> Text.literal("Cancelled bond offering " + id + "."), true);
+        return 1;
+    }
+}

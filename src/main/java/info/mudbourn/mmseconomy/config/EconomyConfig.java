@@ -72,6 +72,12 @@ public final class EconomyConfig {
     // Tax on a player-to-player market purchase, in basis points.
     public int taxPurchaseBps = 500;
 
+    // Tax on each recurring bill charge, in basis points.
+    public int taxBillBps = 500;
+
+    // Tax on the interest portion of a bond redemption, in basis points.
+    public int taxBondBps = 500;
+
     // Entries kept per history category before the oldest is dropped.
     public int historyPerCategory = 250;
 
@@ -80,6 +86,9 @@ public final class EconomyConfig {
 
     // In-game days between bank interest ticks.
     public int bankInterestDays = 30;
+
+    // Library stock of an item at which the server's sell price halves, or 0 for a flat price.
+    public long serverSellHalfStock = 256L;
 
     // Every settable key, for command autocomplete and validation.
     public static final java.util.List<String> KEYS = java.util.List.of(
@@ -102,9 +111,12 @@ public final class EconomyConfig {
         "taxPayBps",
         "taxDealBps",
         "taxPurchaseBps",
+        "taxBillBps",
+        "taxBondBps",
         "historyPerCategory",
         "bankInterestPercent",
-        "bankInterestDays");
+        "bankInterestDays",
+        "serverSellHalfStock");
 
     // Applies a value to a named field, returning false for an unknown key or unparseable value, and saves on success.
     public boolean set(String key, String value) {
@@ -129,9 +141,12 @@ public final class EconomyConfig {
                 case "taxPayBps" -> this.taxPayBps = Integer.parseInt(value);
                 case "taxDealBps" -> this.taxDealBps = Integer.parseInt(value);
                 case "taxPurchaseBps" -> this.taxPurchaseBps = Integer.parseInt(value);
+                case "taxBillBps" -> this.taxBillBps = Integer.parseInt(value);
+                case "taxBondBps" -> this.taxBondBps = Integer.parseInt(value);
                 case "historyPerCategory" -> this.historyPerCategory = Integer.parseInt(value);
                 case "bankInterestPercent" -> this.bankInterestPercent = Integer.parseInt(value);
                 case "bankInterestDays" -> this.bankInterestDays = Integer.parseInt(value);
+                case "serverSellHalfStock" -> this.serverSellHalfStock = Long.parseLong(value);
                 default -> {
                     return false;
                 }
@@ -164,9 +179,12 @@ public final class EconomyConfig {
             + ", taxPayBps=" + taxPayBps
             + ", taxDealBps=" + taxDealBps
             + ", taxPurchaseBps=" + taxPurchaseBps
+            + ", taxBillBps=" + taxBillBps
+            + ", taxBondBps=" + taxBondBps
             + ", historyPerCategory=" + historyPerCategory
             + ", bankInterestPercent=" + bankInterestPercent
-            + ", bankInterestDays=" + bankInterestDays;
+            + ", bankInterestDays=" + bankInterestDays
+            + ", serverSellHalfStock=" + serverSellHalfStock;
     }
 
     public static EconomyConfig load() {

@@ -21,8 +21,28 @@ deals, a barrel-backed marketplace, and a transaction-history ledger.
 - `/eco balance [player]`, `/eco deposit|withdraw <amount>` (at a bank),
   `/eco history`, `/eco market [buy <index>]`, `/eco shop list <price>|unlist
   <index>`, `/eco sell <count>` (server-sell at a bank).
+- `/bill create <player> <amount> <intervalDays> <lateRatePercent> <label>`:
+  ask a player to pay you a recurring bill; they start it with `/bill accept
+  <id>`. `/bill pay <player> <amount> <intervalDays> [late <percent>] <label>`
+  starts a recurring payment from you (a salary) at once. `/bill list` shows
+  bills and debts, `/bill cancel <id>` ends a bill (debt stays owed).
+- `/bond offer <lender> <principal> <ratePercent> <couponDays> <termDays>
+  <lateRatePercent>`: ask for a loan; the lender uses `/bond accept` and
+  receives a bearer bond item. Right-click a bond to collect its accrued
+  coupons and principal. `/bond market` and `/bond buy <offering>` buy
+  Treasury bonds.
+- Admin: `/eco bond issue <principal> <ratePercent> <couponDays> <termDays>
+  <count>`, `/eco bond list`, `/eco bond cancel <offering>`.
 - Admin: `/eco give|take <player> <amount>`, `/eco treasury balance|pay|take`,
   `/eco config [key [value]]`, `/eco buylist reload`.
+
+## Bills and bonds
+
+Bills and bonds run on the in-game day clock. A charge that cannot be paid
+becomes a debt that grows by its late rate each day and is collected from the
+payer's wallet once a day and on join. Bills are taxed at `taxBillBps`; only the
+interest of a bond redemption is taxed, at `taxBondBps`. Bond terms live on the
+server, so copied bond items cannot be redeemed twice.
 
 ## Build
 

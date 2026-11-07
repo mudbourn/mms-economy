@@ -3,6 +3,7 @@ package info.mudbourn.mmseconomy.market;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.DebugAccess;
+import info.mudbourn.mmseconomy.economy.Gems;
 import info.mudbourn.mmseconomy.economy.Tax;
 import info.mudbourn.mmseconomy.economy.TaxKind;
 import info.mudbourn.mmseconomy.economy.Treasury;
@@ -183,17 +184,24 @@ public final class Marketplace {
             buyer.sendMessage(Text.literal("Out of stock."), false);
             return;
         }
-        if (!Wallet.canAfford(buyer, listing.price())) {
-            buyer.sendMessage(Text.literal("You cannot afford that."), false);
+        long tendered = Gems.tender(buyer, listing.price());
+        if (tendered < 0) {
+            buyer.sendMessage(Text.literal("Shops take cash only: carry "
+                + Currency.format(listing.price()) + " in Colt and Pice gems."), false);
             return;
         }
+        long change = tendered - listing.price();
+        if (change > 0) {
+            Gems.giveChange(buyer, change);
+        }
 
-        Tax.Settlement settlement = owner != null
-            ? Tax.settleTaxed(buyer, owner, listing.price(), TaxKind.PURCHASE)
-            : Tax.settleTaxedOffline(buyer, listing.price(), TaxKind.PURCHASE);
-        if (settlement == null) {
-            buyer.sendMessage(Text.literal("Purchase failed."), false);
-            return;
+        long tax = Tax.on(listing.price(), TaxKind.PURCHASE);
+        Tax.Settlement settlement = new Tax.Settlement(listing.price(), tax, listing.price() - tax);
+        if (tax > 0) {
+            Treasury.get(server).credit(tax);
+        }
+        if (owner != null) {
+            Wallet.deposit(owner, settlement.net());
         }
 
         takeOne(barrels, listing);
@@ -213,7 +221,8 @@ public final class Marketplace {
         }
 
         buyer.sendMessage(Text.literal("Bought " + name + " for " + Currency.format(settlement.gross())
-            + " (tax " + Currency.format(settlement.tax()) + ")."), false);
+            + " (tax " + Currency.format(settlement.tax()) + ")"
+            + (change > 0 ? ", change " + Currency.format(change) : "") + "."), false);
     }
 
     // A buyer may reach a listing within shopOwnerRange of its online owner, or within shopMarketRange
@@ -284,10 +293,12 @@ public final class Marketplace {
             return;
         }
         held.decrement(sold);
-        info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer())
-            .store(itemId, sold);
-        Wallet.deposit(player, unit * sold);
-        player.sendMessage(Text.literal("Sold " + sold + " for " + Currency.format(unit * sold) + "."), false);
+        info.mudbourn.mmseconomy.economy.ServerLibrary library =
+            info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer());
+        long payout = ServerBuyList.sellTotal(itemId, library.count(itemId), sold);
+        library.store(itemId, sold);
+        Wallet.deposit(player, payout);
+        player.sendMessage(Text.literal("Sold " + sold + " for " + Currency.format(payout) + "."), false);
     }
 
     // Buys count of a catalog item from the server, drawing from library stock first and minting the rest.
@@ -355,11 +366,13 @@ public final class Marketplace {
             player.sendMessage(Text.literal("You have none of that to sell."), false);
             return;
         }
-        info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer())
-            .store(itemId, removed);
-        Wallet.deposit(player, unit * removed);
+        info.mudbourn.mmseconomy.economy.ServerLibrary library =
+            info.mudbourn.mmseconomy.economy.ServerLibrary.get(player.getEntityWorld().getServer());
+        long payout = ServerBuyList.sellTotal(itemId, library.count(itemId), removed);
+        library.store(itemId, removed);
+        Wallet.deposit(player, payout);
         player.sendMessage(Text.literal("Sold " + removed + " " + item.getName().getString()
-            + " for " + Currency.format(unit * removed) + "."), false);
+            + " for " + Currency.format(payout) + "."), false);
     }
 
     // Removes up to count of an item across the player's inventory, returning how many were taken.
