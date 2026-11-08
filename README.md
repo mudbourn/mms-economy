@@ -31,9 +31,10 @@ wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.
   starts a recurring payment from you (a salary) at once. `/bill list` shows
   bills and debts, `/bill cancel <id>` ends a bill (debt stays owed).
 - `/bond offer <lender> <principal> <ratePercent> <couponDays> <termDays>
-  <lateRatePercent>`: ask for a loan; the lender uses `/bond accept` and
-  receives a bearer bond item. Right-click a bond to collect its accrued
-  coupons and principal. `/bond market` and `/bond buy <offering>` buy
+  <lateRatePercent>`: ask for a loan (couponDays is 7 or 30, rate up to 6.5%);
+  the lender uses `/bond accept` and receives a bearer bond item. Use a bond at
+  a bank to store it in your vault, and `/bond vault` and `/bond withdraw` to
+  list and take bonds out. `/bond market` and `/bond buy <offering>` buy
   Treasury bonds.
 - Admin: `/eco bond issue <principal> <ratePercent> <couponDays> <termDays>
   <count>`, `/eco bond list`, `/eco bond cancel <offering>`.
@@ -47,6 +48,14 @@ becomes a debt that grows by its late rate each day and is collected from the
 payer's wallet once a day and on join. Bills are taxed at `taxBillBps`; only the
 interest of a bond redemption is taxed, at `taxBondBps`. Bond terms live on the
 server, so copied bond items cannot be redeemed twice.
+
+Bonds pay weekly (7 days) or monthly (30 days), and a coupon pays only while
+the bond sits in a bank vault and the vault owner was actively online for the
+whole period (`couponDays * 20` minutes; idle for over five minutes does not
+count). A period that misses the gate does not charge the issuer: its interest
+is carried to the next period that meets it. At maturity the principal is due,
+and carried interest is paid only if the final period meets the gate, otherwise
+it is forfeited.
 
 ## Build
 

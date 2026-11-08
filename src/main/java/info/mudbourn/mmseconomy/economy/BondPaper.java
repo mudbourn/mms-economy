@@ -28,10 +28,11 @@ public final class BondPaper {
         stack.set(DataComponentTypes.LORE, new LoreComponent(List.of(
             Text.literal("Issuer: " + bond.issuerName),
             Text.literal("Principal: " + Currency.format(bond.principal)),
-            Text.literal("Coupon: " + percent(bond.couponBps) + " every " + bond.couponDays + " days"),
+            Text.literal("Coupon: " + percent(bond.couponBps) + " " + Bonds.period(bond.couponDays)),
             Text.literal("Matures on day " + bond.maturityDay),
             Text.literal("Late rate: " + percent(bond.lateBps) + " per day"),
-            Text.literal("Use to collect what it has earned."))));
+            Text.literal("Pays " + Bonds.period(bond.couponDays) + " to an active vault holder."),
+            Text.literal("Use at a bank to store it in your vault."))));
         return stack;
     }
 

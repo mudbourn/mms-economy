@@ -69,8 +69,8 @@ public final class LendingCommand {
             .then(CommandManager.literal("offer")
                 .then(CommandManager.argument("lender", EntityArgumentType.player())
                     .then(CommandManager.argument("principal", StringArgumentType.word())
-                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 10))
-                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 3650))
+                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 6.5))
+                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 30))
                                 .then(CommandManager.argument("termDays", IntegerArgumentType.integer(1, 36500))
                                     .then(CommandManager.argument("lateRatePercent",
                                             DoubleArgumentType.doubleArg(0, 10))
@@ -104,8 +104,8 @@ public final class LendingCommand {
                 .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
                 .then(CommandManager.literal("issue")
                     .then(CommandManager.argument("principal", StringArgumentType.word())
-                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 10))
-                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 3650))
+                        .then(CommandManager.argument("ratePercent", DoubleArgumentType.doubleArg(0, 6.5))
+                            .then(CommandManager.argument("couponDays", IntegerArgumentType.integer(1, 30))
                                 .then(CommandManager.argument("termDays", IntegerArgumentType.integer(1, 36500))
                                     .then(CommandManager.argument("count", IntegerArgumentType.integer(1, 10000))
                                         .executes(LendingCommand::bondIssue)))))))
@@ -115,6 +115,14 @@ public final class LendingCommand {
                     .then(CommandManager.argument("offering", IntegerArgumentType.integer(1))
                         .executes(LendingCommand::bondCancel))));
         dispatcher.register(admin);
+    }
+
+    private static boolean validPeriod(ServerCommandSource source, int days) {
+        if (days != 7 && days != 30) {
+            source.sendError(Text.literal("The coupon period must be 7 (weekly) or 30 (monthly) days."));
+            return false;
+        }
+        return true;
     }
 
     private static int bps(double percent) {
@@ -248,6 +256,9 @@ public final class LendingCommand {
             source.sendError(Text.literal("You cannot borrow from yourself."));
             return 0;
         }
+        if (!validPeriod(source, IntegerArgumentType.getInteger(context, "couponDays"))) {
+            return 0;
+        }
 
         OfferManager.offerBond(
             borrower,
@@ -270,7 +281,8 @@ public final class LendingCommand {
             return 1;
         }
         for (int i = 0; i < held.size(); i++) {
-            player.sendMessage(Text.literal((i + 1) + ". " + Bonds.describe(state, held.get(i))), false);
+            String line = Bonds.describe(context.getSource().getServer(), state, held.get(i));
+            player.sendMessage(Text.literal((i + 1) + ". " + line), false);
         }
         return 1;
     }
@@ -291,7 +303,8 @@ public final class LendingCommand {
     private static int bondIssue(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
         long principal = amount(source, StringArgumentType.getString(context, "principal"));
-        if (principal <= 0) {
+        if (principal <= 0
+            || !validPeriod(source, IntegerArgumentType.getInteger(context, "couponDays"))) {
             return 0;
         }
 

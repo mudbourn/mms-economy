@@ -32,7 +32,7 @@ public final class BondOffering {
         this.id = id;
         this.principal = principal;
         this.couponBps = couponBps;
-        this.couponDays = couponDays;
+        this.couponDays = Bonds.normalizeDays(couponDays);
         this.termDays = termDays;
         this.remaining = remaining;
     }

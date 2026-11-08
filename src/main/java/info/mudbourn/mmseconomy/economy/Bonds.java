@@ -16,11 +16,20 @@ import java.util.UUID;
 // Bond lifecycle: issue, coupon and maturity payments into the bond, debt collection and redemption.
 public final class Bonds {
 
-    private static final int MAX_RATE_BPS = 1000;
+    public static final int MAX_RATE_BPS = 650;
 
     private static final long MAX_PERIODS = 3650L;
 
     private Bonds() {
+    }
+
+    // Snaps a coupon period to weekly (7) or monthly (30) days.
+    public static int normalizeDays(int days) {
+        return days <= 18 ? 7 : 30;
+    }
+
+    public static String period(int days) {
+        return days == 7 ? "weekly" : "monthly";
     }
 
     // Records a new bond; an empty issuer id means the Treasury.
@@ -28,21 +37,25 @@ public final class Bonds {
                              int couponBps, int couponDays, int termDays, int lateBps) {
         Obligations state = Obligations.get(server);
         long day = Billing.today(server);
+        int period = normalizeDays(couponDays);
         Bond bond = new Bond(
             UUID.randomUUID().toString(),
             issuerId,
             issuerName,
             principal,
             Math.min(couponBps, MAX_RATE_BPS),
-            couponDays,
+            period,
             lateBps,
             day,
             day + termDays,
-            day + couponDays,
+            day + period,
             0L,
             0L,
             false,
-            "");
+            "",
+            0L,
+            0L,
+            0L);
         state.bonds.add(bond);
         state.markDirty();
         return bond;
@@ -52,24 +65,36 @@ public final class Bonds {
         player.getInventory().offerOrDrop(BondPaper.create(bond));
     }
 
-    // Moves every coupon and maturity that has come due into the bond, turning any shortfall into debt.
+    // Moves due coupons and maturity into the bond: a period that met the playtime gate charges the issuer.
     public static void processDue(MinecraftServer server, Obligations state, long day) {
         for (Bond bond : new ArrayList<>(state.bonds)) {
             if (bond.matured) {
                 continue;
             }
 
+            boolean gate = gateMet(server, bond);
+            boolean maturing = bond.maturityDay <= day;
             long last = Math.min(day, bond.maturityDay);
-            long interest = 0L;
+            long coupon = Billing.bpsOf(bond.principal, bond.couponBps);
             if (bond.nextCoupon <= last) {
                 long missed = (last - bond.nextCoupon) / bond.couponDays + 1;
-                interest = Billing.times(Billing.bpsOf(bond.principal, bond.couponBps),
-                    Math.min(missed, MAX_PERIODS));
+                long periods = Math.min(missed, MAX_PERIODS);
                 bond.nextCoupon += missed * bond.couponDays;
+                if (gate) {
+                    settleDue(server, state, bond, coupon + bond.carriedInterest, false);
+                    bond.carriedInterest = maturing ? 0L : Billing.times(coupon, periods - 1);
+                } else {
+                    bond.carriedInterest = Math.min(bond.carriedInterest + Billing.times(coupon, periods),
+                        Long.MAX_VALUE / 4L);
+                }
+                restartPeriod(server, bond);
             }
-            settleDue(server, state, bond, interest, false);
-            if (bond.maturityDay <= day) {
+            if (maturing) {
                 bond.matured = true;
+                if (gate) {
+                    settleDue(server, state, bond, bond.carriedInterest, false);
+                }
+                bond.carriedInterest = 0L;
                 settleDue(server, state, bond, bond.principal, true);
             }
         }
@@ -117,6 +142,8 @@ public final class Bonds {
 
         if (atBank(player)) {
             bond.vault = player.getUuid().toString();
+            restartPeriod(server, bond);
+            bond.required = remainingTicks(server, bond);
             stack.decrement(1);
             state.markDirty();
             player.sendMessage(Text.literal("Bond stored in your bank. Payments now go to your wallet."), false);
@@ -173,10 +200,10 @@ public final class Bonds {
     }
 
     // A one-line summary of a bond for vault listings.
-    public static String describe(Obligations state, Bond bond) {
+    public static String describe(MinecraftServer server, Obligations state, Bond bond) {
         return bond.issuerName + " " + Currency.format(bond.principal) + " at "
-            + BondPaper.percent(bond.couponBps) + ", matures day " + bond.maturityDay + "; "
-            + status(state, bond);
+            + BondPaper.percent(bond.couponBps) + " " + period(bond.couponDays) + ", matures day "
+            + bond.maturityDay + "; " + status(server, state, bond);
     }
 
     private static boolean atBank(ServerPlayerEntity player) {
@@ -228,7 +255,7 @@ public final class Bonds {
             return true;
         }
         if (bond.vault.isEmpty()) {
-            player.sendMessage(Text.literal("Bond status: " + status(state, bond)), false);
+            player.sendMessage(Text.literal("Bond status: " + status(server, state, bond)), false);
         }
         return false;
     }
@@ -254,7 +281,7 @@ public final class Bonds {
         return low;
     }
 
-    private static String status(Obligations state, Bond bond) {
+    private static String status(MinecraftServer server, Obligations state, Bond bond) {
         long debt = state.debts.stream()
             .filter(entry -> entry.bond && entry.ref.equals(bond.id))
             .mapToLong(entry -> entry.amount)
@@ -262,8 +289,41 @@ public final class Bonds {
         String next = bond.matured
             ? "matured, awaiting repayment"
             : "next coupon day " + Math.min(bond.nextCoupon, bond.maturityDay);
+        String playtime = bond.vault.isEmpty()
+            ? "not in a vault, no coupons earned"
+            : "playtime " + PlayTime.format(Math.min(progress(server, bond), periodTicks(bond)))
+                + " / " + PlayTime.format(periodTicks(bond)) + " this period";
         return "accrued " + Currency.format(bond.accrued())
-            + ", issuer debt " + Currency.format(debt) + ", " + next + ".";
+            + ", carried " + Currency.format(bond.carriedInterest)
+            + ", issuer debt " + Currency.format(debt) + ", " + next + ", " + playtime + ".";
+    }
+
+    private static long periodTicks(Bond bond) {
+        return bond.required > 0 ? bond.required : bond.couponDays * 24000L;
+    }
+
+    // World ticks left until the current period ends, at most one full period.
+    private static long remainingTicks(MinecraftServer server, Bond bond) {
+        long end = Math.min(bond.nextCoupon, bond.maturityDay) * 24000L;
+        long left = end - server.getOverworld().getTimeOfDay();
+        return Math.max(1L, Math.min(left, bond.couponDays * 24000L));
+    }
+
+    // Active ticks the vault owner has banked since the current period began.
+    private static long progress(MinecraftServer server, Bond bond) {
+        if (bond.vault.isEmpty()) {
+            return 0L;
+        }
+        return Math.max(0L, PlayTime.get(server).ticks(bond.vault) - bond.snapshot);
+    }
+
+    private static boolean gateMet(MinecraftServer server, Bond bond) {
+        return !bond.vault.isEmpty() && progress(server, bond) >= periodTicks(bond);
+    }
+
+    private static void restartPeriod(MinecraftServer server, Bond bond) {
+        bond.snapshot = bond.vault.isEmpty() ? 0L : PlayTime.get(server).ticks(bond.vault);
+        bond.required = 0L;
     }
 
     private static void settleDue(MinecraftServer server, Obligations state, Bond bond, long amount,

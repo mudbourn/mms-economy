@@ -18,8 +18,13 @@ public final class TreasuryBonds {
     public static BondOffering issue(MinecraftServer server, long principal, int couponBps, int couponDays,
                                      int termDays, int count) {
         Obligations state = Obligations.get(server);
-        BondOffering offering = new BondOffering(state.allocateId(), principal, Math.min(couponBps, 1000), couponDays,
-            termDays, count);
+        BondOffering offering = new BondOffering(
+            state.allocateId(),
+            principal,
+            Math.min(couponBps, Bonds.MAX_RATE_BPS),
+            couponDays,
+            termDays,
+            count);
         state.offerings.add(offering);
         state.markDirty();
         return offering;
@@ -40,7 +45,7 @@ public final class TreasuryBonds {
     public static List<String> describe(MinecraftServer server) {
         return Obligations.get(server).offerings.stream()
             .map(offering -> "#" + offering.id + ": " + Currency.format(offering.principal) + ", "
-                + BondPaper.percent(offering.couponBps) + " every " + offering.couponDays + " days, term "
+                + BondPaper.percent(offering.couponBps) + " " + Bonds.period(offering.couponDays) + ", term "
                 + offering.termDays + " days, " + offering.remaining + " left")
             .toList();
     }

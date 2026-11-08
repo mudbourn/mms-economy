@@ -795,7 +795,7 @@ public final class EconomyNetworking {
         List<VaultBondRow> vault = new ArrayList<>();
         List<Bond> vaulted = Bonds.vaulted(obligations, player);
         for (int i = 0; i < vaulted.size(); i++) {
-            vault.add(new VaultBondRow(i + 1, Bonds.describe(obligations, vaulted.get(i))));
+            vault.add(new VaultBondRow(i + 1, Bonds.describe(server, obligations, vaulted.get(i))));
         }
 
         WholesaleManager.retarget(player);
