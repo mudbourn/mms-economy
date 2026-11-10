@@ -334,15 +334,11 @@ public final class HubScreen extends Screen {
         addDrawableChild(deposit);
         addDrawableChild(withdraw);
 
-        if (Chips.casinoLoaded()) {
+        if (Chips.casinoLoaded() && data.admin()) {
             ButtonWidget cashChips = ButtonWidget.builder(Text.literal("Cash chips"), b -> sendBank(true, true))
-                .dimensions(centerX - 80, 146, 78, 20).build();
-            ButtonWidget buyChips = ButtonWidget.builder(Text.literal("Buy chips"), b -> sendBank(false, true))
-                .dimensions(centerX + 2, 146, 78, 20).build();
+                .dimensions(centerX - 80, 146, 160, 20).build();
             cashChips.active = usable;
-            buyChips.active = usable;
             addDrawableChild(cashChips);
-            addDrawableChild(buyChips);
         }
     }
 
@@ -853,6 +849,9 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         int offerings = data.offerings().size();
         int total = offerings + data.vault().size();
+        addDrawableChild(ButtonWidget.builder(Text.literal("Vault bonds"), b ->
+                ClientPlayNetworking.send(new EconomyNetworking.BondVault()))
+            .dimensions(left, this.height - 28, 66, 20).build());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < total; i++) {
             int row = i + scroll;
             int y = LIST_TOP + i * ROW_HEIGHT - 4;

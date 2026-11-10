@@ -203,7 +203,7 @@ public final class Marketplace {
         }
 
         takeOne(barrels, listing);
-        deliver(buyer, template);
+        deliver(buyer, template.copy());
         long unbanked = Gems.value(template.getItem()) > 0
             ? settlement.net()
             : Gems.stockBarrels(barrels, settlement.net());

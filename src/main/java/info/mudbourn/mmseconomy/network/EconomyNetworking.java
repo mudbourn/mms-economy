@@ -405,6 +405,16 @@ public final class EconomyNetworking {
         }
     }
 
+    public record BondVault() implements CustomPayload {
+        public static final Id<BondVault> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_vault"));
+        public static final PacketCodec<RegistryByteBuf, BondVault> CODEC = PacketCodec.unit(new BondVault());
+
+        @Override
+        public Id<? extends CustomPayload> getId() {
+            return ID;
+        }
+    }
+
     public record ServerBuy(String itemId, long count) implements CustomPayload {
         public static final Id<ServerBuy> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "server_buy"));
         public static final PacketCodec<RegistryByteBuf, ServerBuy> CODEC = PacketCodec.of(
@@ -563,6 +573,7 @@ public final class EconomyNetworking {
         PayloadTypeRegistry.playC2S().register(ServerBuy.ID, ServerBuy.CODEC);
         PayloadTypeRegistry.playC2S().register(BondBuy.ID, BondBuy.CODEC);
         PayloadTypeRegistry.playC2S().register(BondWithdraw.ID, BondWithdraw.CODEC);
+        PayloadTypeRegistry.playC2S().register(BondVault.ID, BondVault.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleAdd.ID, WholesaleAdd.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleRemove.ID, WholesaleRemove.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleOrderOffer.ID, WholesaleOrderOffer.CODEC);
@@ -614,6 +625,10 @@ public final class EconomyNetworking {
             if (atBank(player)) {
                 Bonds.withdraw(player, payload.index());
             }
+            refresh(player);
+        });
+        registerAction(BondVault.ID, (player, payload) -> {
+            Bonds.vaultCarried(player);
             refresh(player);
         });
         registerAction(WholesaleAdd.ID, (player, payload) -> {
@@ -860,6 +875,13 @@ public final class EconomyNetworking {
             return;
         }
 
+        boolean gamemaster = net.minecraft.server.command.CommandManager.GAMEMASTERS_CHECK
+            .allows(player.getPermissions()) || debug;
+        if (action.chips() && (!action.deposit() || !gamemaster)) {
+            player.sendMessage(Text.literal("Only admins can cash chips at the bank."), false);
+            return;
+        }
+
         if (action.chips() && (!Chips.casinoLoaded() || amount % Chips.step() != 0)) {
             player.sendMessage(
                 Text.literal("Chips come in multiples of " + Currency.format(Chips.step()) + "."),
@@ -873,12 +895,6 @@ public final class EconomyNetworking {
                 return;
             }
             Wallet.deposit(player, amount);
-        } else if (action.chips()) {
-            if (!Wallet.withdraw(player, amount)) {
-                player.sendMessage(Text.literal("Your balance is too low."), false);
-                return;
-            }
-            Chips.give(player, amount);
         } else if (action.deposit()) {
             if (!Gems.removeExact(player, amount)) {
                 player.sendMessage(Text.literal("You lack gems worth exactly that amount."), false);
@@ -905,7 +921,7 @@ public final class EconomyNetworking {
 
     private static String bankNote(BankAction action) {
         if (action.chips()) {
-            return action.deposit() ? "Chips cashed" : "Chips bought";
+            return "Chips cashed";
         }
         return action.deposit() ? "Bank deposit" : "Bank withdrawal";
     }

@@ -70,25 +70,6 @@ public final class Chips {
         return true;
     }
 
-    // Gives chips worth amount with the fewest stacks, dropping any that do not fit.
-    public static void give(ServerPlayerEntity player, long amount) {
-        Item[] items = items();
-        long remaining = amount;
-        for (int i = 0; i < FACES.length; i++) {
-            long unit = FACES[i] * Currency.ratio();
-            long count = remaining / unit;
-            remaining %= unit;
-            while (count > 0) {
-                int stackSize = (int) Math.min(count, 99L);
-                ItemStack stack = new ItemStack(items[i], stackSize);
-                if (!player.getInventory().insertStack(stack)) {
-                    player.dropItem(stack, false);
-                }
-                count -= stackSize;
-            }
-        }
-    }
-
     private static long count(ServerPlayerEntity player, Item item) {
         long total = 0L;
         int size = player.getInventory().size();

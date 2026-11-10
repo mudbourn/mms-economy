@@ -4,6 +4,7 @@ import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import info.mudbourn.mmseconomy.registry.ModItems;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -152,6 +153,26 @@ public final class Bonds {
         }
         if (payOut(player, state, bond)) {
             stack.decrement(1);
+        }
+    }
+
+    // Stores every bond paper the player carries in their bank vault, at a bank.
+    public static void vaultCarried(ServerPlayerEntity player) {
+        if (!atBank(player)) {
+            player.sendMessage(Text.literal("Stand at a bank to vault bonds."), false);
+            return;
+        }
+        boolean found = false;
+        int size = player.getInventory().size();
+        for (int slot = 0; slot < size; slot++) {
+            ItemStack stack = player.getInventory().getStack(slot);
+            if (stack.isOf(ModItems.BOND)) {
+                found = true;
+                use(player, stack);
+            }
+        }
+        if (!found) {
+            player.sendMessage(Text.literal("You carry no bond papers."), false);
         }
     }
 
