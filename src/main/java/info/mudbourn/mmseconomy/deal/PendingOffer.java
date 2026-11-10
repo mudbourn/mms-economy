@@ -7,7 +7,7 @@ public final class PendingOffer {
 
     public enum Type {
         BILL,
-        BOND
+        LOAN
     }
 
     public final int id;
@@ -26,7 +26,7 @@ public final class PendingOffer {
 
     public final int days;
 
-    public final int termDays;
+    public final int installments;
 
     public final int lateBps;
 
@@ -35,7 +35,7 @@ public final class PendingOffer {
     public int ticksLeft;
 
     public PendingOffer(int id, Type type, UUID proposer, String proposerName, UUID target, long amount,
-                        int rateBps, int days, int termDays, int lateBps, String label, int ticksLeft) {
+                        int rateBps, int days, int installments, int lateBps, String label, int ticksLeft) {
         this.id = id;
         this.type = type;
         this.proposer = proposer;
@@ -44,7 +44,7 @@ public final class PendingOffer {
         this.amount = amount;
         this.rateBps = rateBps;
         this.days = days;
-        this.termDays = termDays;
+        this.installments = installments;
         this.lateBps = lateBps;
         this.label = label;
         this.ticksLeft = ticksLeft;

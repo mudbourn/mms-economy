@@ -1,5 +1,6 @@
 package info.mudbourn.mmseconomy.economy;
 
+import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.block.BankBlock;
 import info.mudbourn.mmseconomy.registry.ModBlocks;
 import net.minecraft.block.BlockState;
@@ -28,6 +29,11 @@ public final class BankAccess {
     private static final int SCAN_ABOVE = 2;
 
     private BankAccess() {
+    }
+
+    // Whether the player stands at a bank within the configured range, or has debug access.
+    public static boolean inReach(ServerPlayerEntity player) {
+        return DebugAccess.has(player) || nearestBank(player, MmsEconomy.config().bankRange) != null;
     }
 
     // The bank block whose face the player is standing at within range, or null when none qualifies.

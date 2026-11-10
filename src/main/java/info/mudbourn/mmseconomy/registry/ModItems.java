@@ -2,6 +2,7 @@ package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.economy.BondItem;
+import info.mudbourn.mmseconomy.economy.LoanDeedItem;
 import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -10,7 +11,7 @@ import net.minecraft.util.Identifier;
 
 import java.util.function.Function;
 
-// Registers the mod's gem currency items, casino chips, the shop book and the bond.
+// Registers the mod's gem currency items, casino chips, the shop book, the bond and the loan deed.
 public final class ModItems {
 
     public static Item PICE;
@@ -20,6 +21,8 @@ public final class ModItems {
     public static Item SHOP_BOOK;
 
     public static Item BOND;
+
+    public static Item LOAN_DEED;
 
     public static Item CHIP_10;
 
@@ -34,6 +37,7 @@ public final class ModItems {
         COLT = register("colt", Item::new, new Item.Settings());
         SHOP_BOOK = register("shop_book", Item::new, new Item.Settings().maxCount(1));
         BOND = register("bond", BondItem::new, new Item.Settings().maxCount(1));
+        LOAN_DEED = register("loan_deed", LoanDeedItem::new, new Item.Settings().maxCount(1));
         CHIP_10 = register("chip_10", Item::new, new Item.Settings());
         CHIP_20 = register("chip_20", Item::new, new Item.Settings());
         CHIP_50 = register("chip_50", Item::new, new Item.Settings());

@@ -81,6 +81,39 @@ public final class EconomyConfig {
     // Tax on the interest portion of a bond redemption, in basis points.
     public int taxBondBps = 500;
 
+    // Tax on the interest portion of a loan payment between players, in basis points.
+    public int taxLoanBps = 500;
+
+    // Whether the bank lends Treasury money to players.
+    public boolean bankLoansEnabled = true;
+
+    // Most bank loan principal a player in good standing may owe at once, in Pice.
+    public long bankLoanMaxPice = 100000L;
+
+    // Most bank loan principal any other player may owe at once, in Pice.
+    public long bankLoanBasicMaxPice = 20000L;
+
+    // Wallet balance in Pice that good standing with the bank needs.
+    public long bankLoanStandingBalancePice = 50000L;
+
+    // Past transactions of the standing size that good standing with the bank needs.
+    public int bankLoanStandingTransactions = 5;
+
+    // Gross Pice a past transaction needs to count toward good standing.
+    public long bankLoanStandingTransactionPice = 10000L;
+
+    // Interest the bank charges on the principal with every installment, in basis points.
+    public int bankLoanRateBps = 300;
+
+    // Days between bank loan installments: 7 for weekly or 30 for monthly.
+    public int bankLoanPeriodDays = 7;
+
+    // Most installments a bank loan may be spread over.
+    public int bankLoanMaxInstallments = 12;
+
+    // Daily growth of a missed bank loan payment, in basis points.
+    public int bankLoanLateBps = 100;
+
     // Entries kept per history category before the oldest is dropped.
     public int historyPerCategory = 250;
 
@@ -117,6 +150,17 @@ public final class EconomyConfig {
         "taxPurchaseBps",
         "taxBillBps",
         "taxBondBps",
+        "taxLoanBps",
+        "bankLoansEnabled",
+        "bankLoanMaxPice",
+        "bankLoanBasicMaxPice",
+        "bankLoanStandingBalancePice",
+        "bankLoanStandingTransactions",
+        "bankLoanStandingTransactionPice",
+        "bankLoanRateBps",
+        "bankLoanPeriodDays",
+        "bankLoanMaxInstallments",
+        "bankLoanLateBps",
         "historyPerCategory",
         "bankInterestPercent",
         "bankInterestDays",
@@ -148,6 +192,19 @@ public final class EconomyConfig {
                 case "taxPurchaseBps" -> this.taxPurchaseBps = Integer.parseInt(value);
                 case "taxBillBps" -> this.taxBillBps = Integer.parseInt(value);
                 case "taxBondBps" -> this.taxBondBps = Integer.parseInt(value);
+                case "taxLoanBps" -> this.taxLoanBps = Integer.parseInt(value);
+                case "bankLoansEnabled" -> this.bankLoansEnabled = Boolean.parseBoolean(value);
+                case "bankLoanMaxPice" -> this.bankLoanMaxPice = Long.parseLong(value);
+                case "bankLoanBasicMaxPice" -> this.bankLoanBasicMaxPice = Long.parseLong(value);
+                case "bankLoanStandingBalancePice" -> this.bankLoanStandingBalancePice = Long.parseLong(value);
+                case "bankLoanStandingTransactions" ->
+                    this.bankLoanStandingTransactions = Integer.parseInt(value);
+                case "bankLoanStandingTransactionPice" ->
+                    this.bankLoanStandingTransactionPice = Long.parseLong(value);
+                case "bankLoanRateBps" -> this.bankLoanRateBps = Integer.parseInt(value);
+                case "bankLoanPeriodDays" -> this.bankLoanPeriodDays = Integer.parseInt(value);
+                case "bankLoanMaxInstallments" -> this.bankLoanMaxInstallments = Integer.parseInt(value);
+                case "bankLoanLateBps" -> this.bankLoanLateBps = Integer.parseInt(value);
                 case "historyPerCategory" -> this.historyPerCategory = Integer.parseInt(value);
                 case "bankInterestPercent" -> this.bankInterestPercent = Integer.parseInt(value);
                 case "bankInterestDays" -> this.bankInterestDays = Integer.parseInt(value);
@@ -187,6 +244,17 @@ public final class EconomyConfig {
             + ", taxPurchaseBps=" + taxPurchaseBps
             + ", taxBillBps=" + taxBillBps
             + ", taxBondBps=" + taxBondBps
+            + ", taxLoanBps=" + taxLoanBps
+            + ", bankLoansEnabled=" + bankLoansEnabled
+            + ", bankLoanMaxPice=" + bankLoanMaxPice
+            + ", bankLoanBasicMaxPice=" + bankLoanBasicMaxPice
+            + ", bankLoanStandingBalancePice=" + bankLoanStandingBalancePice
+            + ", bankLoanStandingTransactions=" + bankLoanStandingTransactions
+            + ", bankLoanStandingTransactionPice=" + bankLoanStandingTransactionPice
+            + ", bankLoanRateBps=" + bankLoanRateBps
+            + ", bankLoanPeriodDays=" + bankLoanPeriodDays
+            + ", bankLoanMaxInstallments=" + bankLoanMaxInstallments
+            + ", bankLoanLateBps=" + bankLoanLateBps
             + ", historyPerCategory=" + historyPerCategory
             + ", bankInterestPercent=" + bankInterestPercent
             + ", bankInterestDays=" + bankInterestDays

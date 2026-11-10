@@ -3,7 +3,7 @@ package info.mudbourn.mmseconomy.economy;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-// An unpaid amount that grows by its late rate each day and is collected from the payer when possible.
+// An unpaid amount that grows by its late rate and is collected from the payer when possible.
 public final class Debt {
 
     public static final Codec<Debt> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -18,7 +18,9 @@ public final class Debt {
         Codec.LONG.fieldOf("amount").forGetter(debt -> debt.amount),
         Codec.LONG.optionalFieldOf("base", -1L).forGetter(debt -> debt.base),
         Codec.INT.fieldOf("lateBps").forGetter(debt -> debt.lateBps),
-        Codec.STRING.fieldOf("label").forGetter(debt -> debt.label)
+        Codec.STRING.fieldOf("label").forGetter(debt -> debt.label),
+        Codec.BOOL.optionalFieldOf("loan", false).forGetter(debt -> debt.loan),
+        Codec.LONG.optionalFieldOf("snapshot", 0L).forGetter(debt -> debt.snapshot)
     ).apply(instance, Debt::new));
 
     public final int id;
@@ -28,31 +30,36 @@ public final class Debt {
 
     public final String payerName;
 
-    // The payee's UUID, or empty for a bond debt, which is paid into the bond.
+    // The payee's UUID, or empty for a bond debt, which is paid into the bond, and for a bank loan debt.
     public final String payee;
 
     public final String payeeName;
 
-    // The bill id or the bond id this debt came from.
+    // The bill id, bond id or loan id this debt came from.
     public final String ref;
 
     public final boolean bond;
 
-    // For a bond debt, whether it is principal rather than coupon interest.
+    // For a bond or loan debt, whether it is principal rather than interest.
     public final boolean principalPart;
 
     public long amount;
 
-    // The part of the amount still owed as bond principal; late growth is not part of it.
+    // The part of the amount still owed as principal; late growth is not part of it.
     public long base;
 
     public final int lateBps;
 
     public final String label;
 
+    public final boolean loan;
+
+    // For a loan debt, the payer's active tick count when its current late day began.
+    public long snapshot;
+
     public Debt(int id, String payer, String payerName, String payee, String payeeName, String ref,
                 boolean bond, boolean principalPart, long amount, long base, int lateBps,
-                String label) {
+                String label, boolean loan, long snapshot) {
         this.id = id;
         this.payer = payer;
         this.payerName = payerName;
@@ -65,5 +72,7 @@ public final class Debt {
         this.base = base >= 0 ? base : (principalPart ? amount : 0L);
         this.lateBps = lateBps;
         this.label = label;
+        this.loan = loan;
+        this.snapshot = snapshot;
     }
 }

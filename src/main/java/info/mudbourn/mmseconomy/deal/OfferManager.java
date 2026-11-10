@@ -3,9 +3,11 @@ package info.mudbourn.mmseconomy.deal;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.economy.Bill;
 import info.mudbourn.mmseconomy.economy.Billing;
-import info.mudbourn.mmseconomy.economy.Bond;
-import info.mudbourn.mmseconomy.economy.Bonds;
+import info.mudbourn.mmseconomy.economy.BondPaper;
 import info.mudbourn.mmseconomy.economy.Currency;
+import info.mudbourn.mmseconomy.economy.Loan;
+import info.mudbourn.mmseconomy.economy.LoanDeed;
+import info.mudbourn.mmseconomy.economy.Loans;
 import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
@@ -39,18 +41,17 @@ public final class OfferManager {
             + ". Accept with /bill accept " + offer.id + "."), false);
     }
 
-    // A borrower asks a lender for a loan on the given bond terms.
-    public static void offerBond(ServerPlayerEntity borrower, ServerPlayerEntity lender, long principal,
-                                 int rateBps, int couponDays, int termDays, int lateBps) {
-        OFFERS.values().removeIf(entry -> entry.type == PendingOffer.Type.BOND
+    // A borrower asks a lender for a loan repaid in installments.
+    public static void offerLoan(ServerPlayerEntity borrower, ServerPlayerEntity lender, long principal,
+                                 int rateBps, int periodDays, int installments, int lateBps) {
+        OFFERS.values().removeIf(entry -> entry.type == PendingOffer.Type.LOAN
             && entry.target.equals(lender.getUuid()));
-        PendingOffer offer = add(PendingOffer.Type.BOND, borrower, lender, principal, rateBps, couponDays,
-            termDays, lateBps, "");
+        add(PendingOffer.Type.LOAN, borrower, lender, principal, rateBps, periodDays, installments, lateBps, "");
         borrower.sendMessage(Text.literal("Loan request sent to " + lender.getName().getString() + "."), false);
-        lender.sendMessage(Text.literal(borrower.getName().getString() + " asks you for a loan of "
-            + Currency.format(principal) + ": " + rateBps / 100.0 + "% every " + couponDays
-            + " days for " + termDays + " days, late rate " + lateBps / 100.0
-            + "% per day. Accept with /bond accept (offer " + offer.id + ")."), false);
+        lender.sendMessage(Text.literal(borrower.getName().getString() + " asks to borrow "
+            + Currency.format(principal) + ", repaid in " + installments + " " + Loans.period(periodDays)
+            + " payments with " + BondPaper.percent(rateBps) + " interest each, late rate "
+            + BondPaper.percent(lateBps) + " per day. Accept with /loan accept."), false);
     }
 
     public static void acceptBill(ServerPlayerEntity payer, int id) {
@@ -71,9 +72,9 @@ public final class OfferManager {
             + " accepted bill " + bill.id + " (" + bill.label + ").");
     }
 
-    public static void acceptBond(ServerPlayerEntity lender) {
+    public static void acceptLoan(ServerPlayerEntity lender) {
         PendingOffer offer = OFFERS.values().stream()
-            .filter(entry -> entry.type == PendingOffer.Type.BOND && entry.target.equals(lender.getUuid()))
+            .filter(entry -> entry.type == PendingOffer.Type.LOAN && entry.target.equals(lender.getUuid()))
             .findFirst()
             .orElse(null);
         if (offer == null) {
@@ -98,19 +99,20 @@ public final class OfferManager {
             return;
         }
         OFFERS.remove(offer.id);
-        Bond bond = Bonds.issue(server, borrower.getUuid().toString(), offer.proposerName, offer.amount,
-            offer.rateBps, offer.days, offer.termDays, offer.lateBps);
-        Bonds.give(lender, bond);
+        String lenderName = lender.getName().getString();
+        Loan loan = Loans.open(server, borrower, lender.getUuid().toString(), lenderName, offer.amount,
+            offer.rateBps, offer.days, offer.installments, offer.lateBps);
+        lender.getInventory().offerOrDrop(LoanDeed.create(loan));
 
         long day = History.currentDay(lender);
         History.log(lender, new HistoryEntry(day, HistoryCategory.DEAL, "", 0,
             offer.amount, 0L, -offer.amount, offer.proposerName + " loan"));
         History.log(borrower, new HistoryEntry(day, HistoryCategory.DEAL, "", 0,
-            offer.amount, 0L, offer.amount, lender.getName().getString() + " loan"));
+            offer.amount, 0L, offer.amount, lenderName + " loan"));
         lender.sendMessage(Text.literal("Lent " + Currency.format(offer.amount) + " to " + offer.proposerName
-            + ". You hold the bond; matures on day " + bond.maturityDay + "."), false);
+            + " as " + Loans.label(loan) + ": " + Loans.terms(loan) + ". You hold the deed."), false);
         borrower.sendMessage(Text.literal("Borrowed " + Currency.format(offer.amount) + " from "
-            + lender.getName().getString() + ". Coupons are due every " + offer.days + " days."), false);
+            + lenderName + " as " + Loans.label(loan) + ": " + Loans.terms(loan) + "."), false);
     }
 
     // Expires requests that have waited past the deal timeout.
@@ -135,7 +137,7 @@ public final class OfferManager {
 
     private static PendingOffer add(PendingOffer.Type type, ServerPlayerEntity proposer,
                                     ServerPlayerEntity target, long amount, int rateBps, int days,
-                                    int termDays, int lateBps, String label) {
+                                    int installments, int lateBps, String label) {
         PendingOffer offer = new PendingOffer(
             nextId++,
             type,
@@ -145,7 +147,7 @@ public final class OfferManager {
             amount,
             rateBps,
             days,
-            termDays,
+            installments,
             lateBps,
             label,
             MmsEconomy.config().dealTimeoutTicks);

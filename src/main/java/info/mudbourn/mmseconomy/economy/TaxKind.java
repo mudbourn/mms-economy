@@ -6,5 +6,6 @@ public enum TaxKind {
     DEAL,
     PURCHASE,
     BILL,
-    BOND
+    BOND,
+    LOAN
 }

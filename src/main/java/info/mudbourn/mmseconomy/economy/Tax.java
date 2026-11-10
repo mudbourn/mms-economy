@@ -26,6 +26,7 @@ public final class Tax {
             case PURCHASE -> config.taxPurchaseBps;
             case BILL -> config.taxBillBps;
             case BOND -> config.taxBondBps;
+            case LOAN -> config.taxLoanBps;
         };
         if (bps <= 0) {
             return 0L;

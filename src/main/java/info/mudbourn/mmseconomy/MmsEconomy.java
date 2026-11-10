@@ -62,6 +62,8 @@ public class MmsEconomy implements ModInitializer {
 
         ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.Billing::tick);
 
+        ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.economy.Loans::tick);
+
         ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.deal.OfferManager::tickAll);
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->

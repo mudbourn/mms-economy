@@ -9,14 +9,16 @@ import info.mudbourn.mmseconomy.deal.WholesaleOrder;
 import info.mudbourn.mmseconomy.economy.BankAccess;
 import info.mudbourn.mmseconomy.economy.BankOccupancy;
 import info.mudbourn.mmseconomy.economy.Bond;
+import info.mudbourn.mmseconomy.economy.BondMarket;
 import info.mudbourn.mmseconomy.economy.BondOffering;
 import info.mudbourn.mmseconomy.economy.Bonds;
 import info.mudbourn.mmseconomy.economy.Chips;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.DebugAccess;
 import info.mudbourn.mmseconomy.economy.Gems;
+import info.mudbourn.mmseconomy.economy.Loan;
+import info.mudbourn.mmseconomy.economy.Loans;
 import info.mudbourn.mmseconomy.economy.Obligations;
-import info.mudbourn.mmseconomy.economy.TreasuryBonds;
 import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
@@ -70,7 +72,10 @@ public final class EconomyNetworking {
     }
 
     public record BondOfferingRow(int id, long principal, int couponBps, int couponDays, int termDays,
-                                  int remaining) {
+                                  int remaining, String issuer, boolean own) {
+    }
+
+    public record LoanRow(int id, String text, boolean owed, long payoff) {
     }
 
     public record VaultBondRow(int index, String text) {
@@ -94,7 +99,7 @@ public final class EconomyNetworking {
                           List<LibraryRow> library, String focusOwner, BlockPos focusDepot,
                           List<BondOfferingRow> offerings, List<VaultBondRow> vault,
                           boolean wholesale, List<WholesaleOfferRow> wholesaleOffers,
-                          List<WholesaleOrderRow> wholesaleOrders)
+                          List<WholesaleOrderRow> wholesaleOrders, List<LoanRow> loans, String bankLoanTerms)
         implements CustomPayload {
         public static final Id<OpenHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_hub"));
         public static final PacketCodec<RegistryByteBuf, OpenHub> CODEC = PacketCodec.of(
@@ -161,6 +166,8 @@ public final class EconomyNetworking {
                     buf.writeVarInt(row.couponDays());
                     buf.writeVarInt(row.termDays());
                     buf.writeVarInt(row.remaining());
+                    buf.writeString(row.issuer());
+                    buf.writeBoolean(row.own());
                 }
                 buf.writeVarInt(value.vault.size());
                 for (VaultBondRow row : value.vault) {
@@ -190,6 +197,14 @@ public final class EconomyNetworking {
                     buf.writeBoolean(row.inTransit());
                     buf.writeVarInt(row.remaining());
                 }
+                buf.writeVarInt(value.loans.size());
+                for (LoanRow row : value.loans) {
+                    buf.writeVarInt(row.id());
+                    buf.writeString(row.text());
+                    buf.writeBoolean(row.owed());
+                    buf.writeLong(row.payoff());
+                }
+                buf.writeString(value.bankLoanTerms);
             },
             buf -> {
                 long balance = buf.readLong();
@@ -236,7 +251,8 @@ public final class EconomyNetworking {
                 List<BondOfferingRow> offerings = new ArrayList<>(offeringCount);
                 for (int i = 0; i < offeringCount; i++) {
                     offerings.add(new BondOfferingRow(buf.readVarInt(), buf.readLong(), buf.readVarInt(),
-                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt()));
+                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readString(),
+                        buf.readBoolean()));
                 }
                 int vaultCount = buf.readVarInt();
                 List<VaultBondRow> vault = new ArrayList<>(vaultCount);
@@ -259,9 +275,16 @@ public final class EconomyNetworking {
                         buf.readLong(), buf.readString(), buf.readBoolean(), buf.readBoolean(),
                         buf.readVarInt()));
                 }
+                int loanCount = buf.readVarInt();
+                List<LoanRow> loans = new ArrayList<>(loanCount);
+                for (int i = 0; i < loanCount; i++) {
+                    loans.add(new LoanRow(buf.readVarInt(), buf.readString(), buf.readBoolean(), buf.readLong()));
+                }
+                String bankLoanTerms = buf.readString();
                 return new OpenHub(balance, pocket, coltRatio, interestPercent, interestDays,
                     hasBank, occupied, nearDepot, mode, listings, mine, shopCatalog, admin, treasury, library,
-                    focusOwner, focusDepot, offerings, vault, wholesale, wholesaleOffers, wholesaleOrders);
+                    focusOwner, focusDepot, offerings, vault, wholesale, wholesaleOffers, wholesaleOrders,
+                    loans, bankLoanTerms);
             });
 
         @Override
@@ -398,6 +421,30 @@ public final class EconomyNetworking {
         public static final PacketCodec<RegistryByteBuf, BondWithdraw> CODEC = PacketCodec.of(
             (value, buf) -> buf.writeVarInt(value.index),
             buf -> new BondWithdraw(buf.readVarInt()));
+
+        @Override
+        public Id<? extends CustomPayload> getId() {
+            return ID;
+        }
+    }
+
+    public record BondCancel(int offeringId) implements CustomPayload {
+        public static final Id<BondCancel> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_cancel"));
+        public static final PacketCodec<RegistryByteBuf, BondCancel> CODEC = PacketCodec.of(
+            (value, buf) -> buf.writeVarInt(value.offeringId),
+            buf -> new BondCancel(buf.readVarInt()));
+
+        @Override
+        public Id<? extends CustomPayload> getId() {
+            return ID;
+        }
+    }
+
+    public record LoanRepay(int id) implements CustomPayload {
+        public static final Id<LoanRepay> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "loan_repay"));
+        public static final PacketCodec<RegistryByteBuf, LoanRepay> CODEC = PacketCodec.of(
+            (value, buf) -> buf.writeVarInt(value.id),
+            buf -> new LoanRepay(buf.readVarInt()));
 
         @Override
         public Id<? extends CustomPayload> getId() {
@@ -574,6 +621,8 @@ public final class EconomyNetworking {
         PayloadTypeRegistry.playC2S().register(BondBuy.ID, BondBuy.CODEC);
         PayloadTypeRegistry.playC2S().register(BondWithdraw.ID, BondWithdraw.CODEC);
         PayloadTypeRegistry.playC2S().register(BondVault.ID, BondVault.CODEC);
+        PayloadTypeRegistry.playC2S().register(BondCancel.ID, BondCancel.CODEC);
+        PayloadTypeRegistry.playC2S().register(LoanRepay.ID, LoanRepay.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleAdd.ID, WholesaleAdd.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleRemove.ID, WholesaleRemove.CODEC);
         PayloadTypeRegistry.playC2S().register(WholesaleOrderOffer.ID, WholesaleOrderOffer.CODEC);
@@ -617,7 +666,7 @@ public final class EconomyNetworking {
         });
         registerAction(BondBuy.ID, (player, payload) -> {
             if (atBank(player)) {
-                TreasuryBonds.buy(player, payload.offeringId());
+                BondMarket.buy(player, payload.offeringId());
             }
             refresh(player);
         });
@@ -625,6 +674,15 @@ public final class EconomyNetworking {
             if (atBank(player)) {
                 Bonds.withdraw(player, payload.index());
             }
+            refresh(player);
+        });
+        registerAction(BondCancel.ID, (player, payload) -> {
+            BondMarket.cancel(player.getEntityWorld().getServer(), payload.offeringId(),
+                player.getUuid().toString());
+            refresh(player);
+        });
+        registerAction(LoanRepay.ID, (player, payload) -> {
+            Loans.repay(player, payload.id());
             refresh(player);
         });
         registerAction(BondVault.ID, (player, payload) -> {
@@ -805,12 +863,20 @@ public final class EconomyNetworking {
         List<BondOfferingRow> offerings = new ArrayList<>();
         for (BondOffering offering : obligations.offerings) {
             offerings.add(new BondOfferingRow(offering.id, offering.principal, offering.couponBps,
-                offering.couponDays, offering.termDays, offering.remaining));
+                offering.couponDays, offering.termDays, offering.remaining, offering.issuerName,
+                offering.issuer.equals(player.getUuid().toString())));
         }
         List<VaultBondRow> vault = new ArrayList<>();
         List<Bond> vaulted = Bonds.vaulted(obligations, player);
         for (int i = 0; i < vaulted.size(); i++) {
             vault.add(new VaultBondRow(i + 1, Bonds.describe(server, obligations, vaulted.get(i))));
+        }
+
+        String playerId = player.getUuid().toString();
+        List<LoanRow> loans = new ArrayList<>();
+        for (Loan loan : Loans.involving(obligations, playerId)) {
+            loans.add(new LoanRow(loan.id, Loans.describe(server, loan, playerId), loan.borrower.equals(playerId),
+                loan.payoff()));
         }
 
         WholesaleManager.retarget(player);
@@ -846,7 +912,8 @@ public final class EconomyNetworking {
             mode,
             listings, mine, shopCatalog, admin, treasury, library,
             focusOwner, focusDepot, offerings, vault,
-            WholesaleManager.canTrade(player), wholesaleOffers, wholesaleOrders);
+            WholesaleManager.canTrade(player), wholesaleOffers, wholesaleOrders,
+            loans, Loans.bankTerms(player));
     }
 
     // The listing's live stock, reading each depot's barrels at most once per snapshot.

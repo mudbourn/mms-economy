@@ -14,7 +14,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.UUID;
 
-// The in-game day clock for bills, bonds and debts: charges what is due, grows late debts and collects them.
+// The in-game day clock for bills, bonds, loans and debts: charges what is due, grows late debts and collects them.
 public final class Billing {
 
     private static final int MAX_GROWTH_DAYS = 3650;
@@ -50,7 +50,7 @@ public final class Billing {
         return amount > AMOUNT_CAP / n ? AMOUNT_CAP : amount * n;
     }
 
-    // Runs once per new in-game day: late growth, due bills, due bonds, then debt collection.
+    // Runs once per new in-game day: late growth, due bills and bonds, then debt collection.
     public static void tick(MinecraftServer server) {
         ServerWorld overworld = server.getOverworld();
         if (overworld == null) {
@@ -104,7 +104,7 @@ public final class Billing {
         long owed = owedBy(state, id);
         if (owed > 0) {
             player.sendMessage(Text.literal("You owe " + Currency.format(owed)
-                + " in overdue bills and bonds."), false);
+                + " in overdue bills, bonds and loans."), false);
         }
     }
 
@@ -183,18 +183,27 @@ public final class Billing {
     }
 
     // Opens a debt record for an unpaid amount.
-    public static void addDebt(Obligations state, String payerId, String payerName, String payeeId,
-                               String payeeName, String ref, boolean bond, boolean principalPart,
-                               long amount, int lateBps, String label) {
-        state.debts.add(new Debt(state.allocateId(), payerId, payerName, payeeId, payeeName, ref,
-            bond, principalPart, amount, -1L, lateBps, label));
+    public static Debt addDebt(Obligations state, String payerId, String payerName, String payeeId,
+                               String payeeName, String ref, boolean bond, boolean loan,
+                               boolean principalPart, long amount, int lateBps, String label) {
+        Debt debt = new Debt(state.allocateId(), payerId, payerName, payeeId, payeeName, ref,
+            bond, principalPart, amount, -1L, lateBps, label, loan, 0L);
+        state.debts.add(debt);
         state.markDirty();
+        return debt;
     }
 
     private static void growDebts(Obligations state) {
         for (Debt debt : state.debts) {
-            debt.amount = Math.min(AMOUNT_CAP, debt.amount + bpsOf(debt.amount, debt.lateBps));
+            if (!debt.loan) {
+                grow(debt);
+            }
         }
+    }
+
+    // Adds one day of late growth to a debt.
+    public static void grow(Debt debt) {
+        debt.amount = Math.min(AMOUNT_CAP, debt.amount + bpsOf(debt.amount, debt.lateBps));
     }
 
     private static void charge(MinecraftServer server, Obligations state, Bill bill, long due) {
@@ -206,7 +215,7 @@ public final class Billing {
         }
 
         addDebt(state, bill.payer, bill.payerName, bill.payee, bill.payeeName, Integer.toString(bill.id),
-            false, false, shortfall, bill.lateBps, bill.label);
+            false, false, false, shortfall, bill.lateBps, bill.label);
         tell(server, bill.payer, "Missed bill " + bill.label + " to " + bill.payeeName + ": "
             + Currency.format(shortfall) + " is now a debt.");
         tell(server, bill.payee, bill.payerName + " missed bill " + bill.label + ": "
@@ -217,6 +226,8 @@ public final class Billing {
         long paid;
         if (debt.bond) {
             paid = Bonds.collect(server, state, debt);
+        } else if (debt.loan) {
+            paid = Loans.collect(server, debt);
         } else {
             ServerPlayerEntity payer = server.getPlayerManager().getPlayer(UUID.fromString(debt.payer));
             paid = payer == null ? 0L : pay(server, payer, debt.payee, debt.payeeName, debt.amount, debt.label);

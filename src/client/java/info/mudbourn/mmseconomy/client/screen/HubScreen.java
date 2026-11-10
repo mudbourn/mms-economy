@@ -7,6 +7,7 @@ import info.mudbourn.mmseconomy.history.HistoryEntry;
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import info.mudbourn.mmseconomy.economy.BondPaper;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.BondOfferingRow;
+import info.mudbourn.mmseconomy.network.EconomyNetworking.LoanRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.LibraryRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.MarketRow;
 import info.mudbourn.mmseconomy.network.EconomyNetworking.OpenHub;
@@ -45,6 +46,7 @@ public final class HubScreen extends Screen {
         SHOPS,
         DEALS,
         BONDS,
+        LOANS,
         HISTORY,
         ADMIN
     }
@@ -209,6 +211,7 @@ public final class HubScreen extends Screen {
             case SHOPS -> data.mode() != MODE_BANKING;
             case DEALS -> data.mode() == MODE_MERCHANT;
             case BONDS -> data.mode() == MODE_BANKING;
+            case LOANS -> data.mode() == MODE_BANKING;
             case HISTORY -> true;
             case ADMIN -> data.admin();
         };
@@ -221,6 +224,7 @@ public final class HubScreen extends Screen {
             case SHOPS -> "Shops";
             case DEALS -> "Deals";
             case BONDS -> "Bonds";
+            case LOANS -> "Loans";
             case HISTORY -> "History";
             case ADMIN -> "Admin";
         };
@@ -273,6 +277,7 @@ public final class HubScreen extends Screen {
             case SHOPS -> initShops();
             case DEALS -> initDeals();
             case BONDS -> initBonds();
+            case LOANS -> initLoans();
             case HISTORY -> initHistory();
             case ADMIN -> initAdmin();
         }
@@ -857,11 +862,17 @@ public final class HubScreen extends Screen {
             int y = LIST_TOP + i * ROW_HEIGHT - 4;
             if (row < offerings) {
                 BondOfferingRow offering = data.offerings().get(row);
-                ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b ->
-                        ClientPlayNetworking.send(new EconomyNetworking.BondBuy(offering.id())))
-                    .dimensions(left + 280, y, 60, 20).build();
-                buy.active = data.balance() >= offering.principal();
-                addDrawableChild(buy);
+                if (offering.own()) {
+                    addDrawableChild(ButtonWidget.builder(Text.literal("Withdraw"), b ->
+                            ClientPlayNetworking.send(new EconomyNetworking.BondCancel(offering.id())))
+                        .dimensions(left + 280, y, 60, 20).build());
+                } else {
+                    ButtonWidget buy = ButtonWidget.builder(Text.literal("Invest"), b ->
+                            ClientPlayNetworking.send(new EconomyNetworking.BondBuy(offering.id())))
+                        .dimensions(left + 280, y, 60, 20).build();
+                    buy.active = data.balance() >= offering.principal();
+                    addDrawableChild(buy);
+                }
             } else {
                 VaultBondRow held = data.vault().get(row - offerings);
                 addDrawableChild(ButtonWidget.builder(Text.literal("Take out"), b ->
@@ -887,7 +898,7 @@ public final class HubScreen extends Screen {
             if (row < offerings) {
                 BondOfferingRow offering = data.offerings().get(row);
                 context.drawTextWithShadow(this.textRenderer,
-                    "Treasury  " + Currency.format(offering.principal()) + "  "
+                    offering.issuer() + "  " + Currency.format(offering.principal()) + "  "
                         + BondPaper.percent(offering.couponBps()) + " every " + offering.couponDays() + " days",
                     left + ICON_WIDTH, y, 0xFFFFFFFF);
                 context.drawTextWithShadow(this.textRenderer,
@@ -899,6 +910,49 @@ public final class HubScreen extends Screen {
                 context.drawTextWithShadow(this.textRenderer,
                     this.textRenderer.trimToWidth(held.text(), 210), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             }
+            drawItemRow(context, icon, left, y, mouseX, mouseY);
+        }
+    }
+
+    private void initLoans() {
+        int left = this.width / 2 - 170;
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.loans().size(); i++) {
+            LoanRow loan = data.loans().get(i + scroll);
+            if (!loan.owed()) {
+                continue;
+            }
+            ButtonWidget payOff = ButtonWidget.builder(Text.literal("Pay off"), b ->
+                    ClientPlayNetworking.send(new EconomyNetworking.LoanRepay(loan.id())))
+                .dimensions(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
+            payOff.active = data.balance() >= loan.payoff();
+            addDrawableChild(payOff);
+        }
+    }
+
+    private void renderLoans(DrawContext context, int mouseX, int mouseY) {
+        int left = this.width / 2 - 170;
+        String bank = data.bankLoanTerms().isEmpty()
+            ? "The bank is not lending. Ask a player with /loan request."
+            : "Bank lends " + data.bankLoanTerms() + ": /loan bank <amount> <payments>";
+        context.drawTextWithShadow(this.textRenderer,
+            this.textRenderer.trimToWidth(bank, 340), left, this.height - 44, 0xFFAAAAAA);
+        if (data.loans().isEmpty()) {
+            context.drawTextWithShadow(this.textRenderer, "You have no loans.", left, LIST_TOP, 0xFFAAAAAA);
+            return;
+        }
+        ItemStack icon = new ItemStack(ModItems.LOAN_DEED);
+        for (int i = 0; i < ROWS_VISIBLE && i + scroll < data.loans().size(); i++) {
+            LoanRow loan = data.loans().get(i + scroll);
+            int y = LIST_TOP + i * ROW_HEIGHT;
+            int split = loan.text().indexOf(", ");
+            String first = split < 0 ? loan.text() : loan.text().substring(0, split);
+            String second = split < 0
+                ? ""
+                : loan.text().substring(split + 2) + (loan.owed() ? "  pay off " + Currency.format(loan.payoff()) : "");
+            context.drawTextWithShadow(this.textRenderer,
+                this.textRenderer.trimToWidth(first, 250), left + ICON_WIDTH, y, loan.owed() ? 0xFFFFE066 : 0xFFFFFFFF);
+            context.drawTextWithShadow(this.textRenderer,
+                this.textRenderer.trimToWidth(second, 250), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             drawItemRow(context, icon, left, y, mouseX, mouseY);
         }
     }
@@ -919,6 +973,7 @@ public final class HubScreen extends Screen {
             };
             case DEALS -> dealLines().size();
             case BONDS -> data.offerings().size() + data.vault().size();
+            case LOANS -> data.loans().size();
             case HISTORY -> historyRows().size();
             case ADMIN -> data.library().size();
             case BANK -> 0;
@@ -963,6 +1018,7 @@ public final class HubScreen extends Screen {
             case SHOPS -> renderShops(context, mouseX, mouseY);
             case DEALS -> renderDeals(context, mouseX, mouseY);
             case BONDS -> renderBonds(context, mouseX, mouseY);
+            case LOANS -> renderLoans(context, mouseX, mouseY);
             case HISTORY -> renderHistory(context);
             case ADMIN -> renderAdmin(context);
         }

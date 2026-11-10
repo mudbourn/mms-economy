@@ -10,7 +10,7 @@ import net.minecraft.world.PersistentStateType;
 import java.util.ArrayList;
 import java.util.List;
 
-// Every active bill, bond, debt and Treasury bond offering, saved on the overworld.
+// Every active bill, bond, loan, debt and bond offering, saved on the overworld.
 public final class Obligations extends PersistentState {
 
     public static final Codec<Obligations> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -19,7 +19,9 @@ public final class Obligations extends PersistentState {
         Bill.CODEC.listOf().fieldOf("bills").forGetter(state -> state.bills),
         Bond.CODEC.listOf().fieldOf("bonds").forGetter(state -> state.bonds),
         Debt.CODEC.listOf().fieldOf("debts").forGetter(state -> state.debts),
-        BondOffering.CODEC.listOf().fieldOf("offerings").forGetter(state -> state.offerings)
+        BondOffering.CODEC.listOf().fieldOf("offerings").forGetter(state -> state.offerings),
+        Loan.CODEC.listOf().optionalFieldOf("loans", List.of()).forGetter(state -> state.loans),
+        Codec.INT.optionalFieldOf("version", 0).forGetter(state -> state.version)
     ).apply(instance, Obligations::new));
 
     public static final PersistentStateType<Obligations> TYPE = new PersistentStateType<>(
@@ -27,6 +29,8 @@ public final class Obligations extends PersistentState {
         Obligations::new,
         CODEC,
         DataFixTypes.LEVEL);
+
+    private static final int VERSION = 1;
 
     public long lastDay;
 
@@ -40,25 +44,34 @@ public final class Obligations extends PersistentState {
 
     public final List<BondOffering> offerings;
 
+    public final List<Loan> loans;
+
+    private int version;
+
     public Obligations() {
-        this(-1L, 1, List.of(), List.of(), List.of(), List.of());
+        this(-1L, 1, List.of(), List.of(), List.of(), List.of(), List.of(), VERSION);
     }
 
     public Obligations(long lastDay, int nextId, List<Bill> bills, List<Bond> bonds,
-                       List<Debt> debts, List<BondOffering> offerings) {
+                       List<Debt> debts, List<BondOffering> offerings, List<Loan> loans, int version) {
         this.lastDay = lastDay;
         this.nextId = nextId;
         this.bills = new ArrayList<>(bills);
         this.bonds = new ArrayList<>(bonds);
         this.debts = new ArrayList<>(debts);
         this.offerings = new ArrayList<>(offerings);
+        this.loans = new ArrayList<>(loans);
+        this.version = version;
+        if (version < VERSION) {
+            dropPlayerBonds();
+        }
     }
 
     public static Obligations get(MinecraftServer server) {
         return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
     }
 
-    // The next id shared by bills, debts and offerings.
+    // The next id shared by bills, debts, loans and offerings.
     public int allocateId() {
         markDirty();
         return nextId++;
@@ -72,11 +85,27 @@ public final class Obligations extends PersistentState {
         return bonds.stream().filter(bond -> bond.id.equals(id)).findFirst().orElse(null);
     }
 
+    public Loan loan(int id) {
+        return loans.stream().filter(loan -> loan.id == id).findFirst().orElse(null);
+    }
+
     public BondOffering offering(int id) {
         return offerings.stream().filter(offering -> offering.id == id).findFirst().orElse(null);
     }
 
     public boolean hasDebtFor(Bond bond) {
         return debts.stream().anyMatch(debt -> debt.bond && debt.ref.equals(bond.id));
+    }
+
+    // Removes every player-issued bond and its debts from a save written before version 1.
+    private void dropPlayerBonds() {
+        List<String> dropped = bonds.stream()
+            .filter(bond -> !bond.byTreasury())
+            .map(bond -> bond.id)
+            .toList();
+        debts.removeIf(debt -> debt.bond && dropped.contains(debt.ref));
+        bonds.removeIf(bond -> !bond.byTreasury());
+        version = VERSION;
+        markDirty();
     }
 }

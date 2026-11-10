@@ -141,7 +141,7 @@ public final class Bonds {
             return;
         }
 
-        if (atBank(player)) {
+        if (BankAccess.inReach(player)) {
             bond.vault = player.getUuid().toString();
             restartPeriod(server, bond);
             bond.required = remainingTicks(server, bond);
@@ -158,7 +158,7 @@ public final class Bonds {
 
     // Stores every bond paper the player carries in their bank vault, at a bank.
     public static void vaultCarried(ServerPlayerEntity player) {
-        if (!atBank(player)) {
+        if (!BankAccess.inReach(player)) {
             player.sendMessage(Text.literal("Stand at a bank to vault bonds."), false);
             return;
         }
@@ -203,7 +203,7 @@ public final class Bonds {
         if (server == null) {
             return;
         }
-        if (!atBank(player)) {
+        if (!BankAccess.inReach(player)) {
             player.sendMessage(Text.literal("Stand at a bank to take bonds out of your vault."), false);
             return;
         }
@@ -225,11 +225,6 @@ public final class Bonds {
         return bond.issuerName + " " + Currency.format(bond.principal) + " at "
             + BondPaper.percent(bond.couponBps) + " " + period(bond.couponDays) + ", matures day "
             + bond.maturityDay + "; " + status(server, state, bond);
-    }
-
-    private static boolean atBank(ServerPlayerEntity player) {
-        return DebugAccess.has(player)
-            || BankAccess.nearestBank(player, MmsEconomy.config().bankRange) != null;
     }
 
     private static void settleVaulted(ServerPlayerEntity owner, Obligations state, Bond bond) {
@@ -361,7 +356,7 @@ public final class Bonds {
         }
 
         String label = "Bond " + bond.id.substring(0, 8);
-        Billing.addDebt(state, bond.issuer, bond.issuerName, "", "", bond.id, true, principalPart,
+        Billing.addDebt(state, bond.issuer, bond.issuerName, "", "", bond.id, true, false, principalPart,
             shortfall, bond.lateBps, label);
         Billing.tell(server, bond.issuer, "Missed " + label + " payment: "
             + Currency.format(shortfall) + " is now a debt.");

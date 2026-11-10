@@ -30,6 +30,7 @@ public final class ModItemGroups {
                 entries.add(ModBlocks.BANK);
                 entries.add(ModItems.SHOP_BOOK);
                 entries.add(ModItems.BOND);
+                entries.add(ModItems.LOAN_DEED);
                 if (Chips.casinoLoaded()) {
                     entries.add(ModItems.CHIP_10);
                     entries.add(ModItems.CHIP_20);

@@ -30,24 +30,51 @@ wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.
   <id>`. `/bill pay <player> <amount> <intervalDays> [late <percent>] <label>`
   starts a recurring payment from you (a salary) at once. `/bill list` shows
   bills and debts, `/bill cancel <id>` ends a bill (debt stays owed).
-- `/bond offer <lender> <principal> <ratePercent> <couponDays> <termDays>
-  <lateRatePercent>`: ask for a loan (couponDays is 7 or 30, rate up to 6.5%);
-  the lender uses `/bond accept` and receives a bearer bond item. Use a bond at
-  a bank to store it in your vault, and `/bond vault` and `/bond withdraw` to
-  list and take bonds out. `/bond market` and `/bond buy <offering>` buy
-  Treasury bonds.
+- `/bond market` and `/bond buy <offering>`: invest in a bond from the
+  Treasury or a player and receive a bearer bond item. Use a bond at a bank to
+  store it in your vault, and `/bond vault` and `/bond withdraw` to list and
+  take bonds out. `/bond issue <principal> <ratePercent> <couponDays>
+  <termDays> <lateRatePercent> <count>` puts your own bonds on the market
+  (couponDays is 7 or 30, rate up to 6.5%), and `/bond cancel <offering>`
+  withdraws the unsold ones.
+- `/loan request <lender> <principal> <ratePercent> <periodDays>
+  <installments> <lateRatePercent>`: ask a player to lend you money
+  (periodDays is 7 or 30, rate up to 6.5% per payment); they use `/loan
+  accept` and receive a loan deed. `/loan bank <amount> <installments>`
+  borrows from the bank while standing at one. `/loan list` shows your loans
+  and `/loan repay <id>` pays one off early.
 - Admin: `/eco bond issue <principal> <ratePercent> <couponDays> <termDays>
   <count>`, `/eco bond list`, `/eco bond cancel <offering>`.
 - Admin: `/eco give|take <player> <amount>`, `/eco treasury balance|pay|take`,
   `/eco config [key [value]]`, `/eco buylist reload`.
 
-## Bills and bonds
+## Bills, bonds and loans
 
 Bills and bonds run on the in-game day clock. A charge that cannot be paid
 becomes a debt that grows by its late rate each day and is collected from the
 payer's wallet once a day and on join. Bills are taxed at `taxBillBps`; only the
 interest of a bond redemption is taxed, at `taxBondBps`. Bond terms live on the
 server, so copied bond items cannot be redeemed twice.
+
+A bond is an investment: the buyer pays the principal to the issuer (the
+Treasury or the player who put the offering on the market), collects coupons,
+and gets the principal back at maturity.
+
+A loan is borrowed money: the lender (a player or the bank) hands over the
+principal and the borrower repays it in equal installments, each with flat
+interest on the original principal. The bank lends Treasury money on the
+`bankLoan*` config terms: a player may owe it up to `bankLoanBasicMaxPice`
+(C200), or up to `bankLoanMaxPice` (C1000) while their balance is at least
+`bankLoanStandingBalancePice` (C500) and their history holds at least
+`bankLoanStandingTransactions` (5) transactions of
+`bankLoanStandingTransactionPice` (C100) or more, bank loan rows excluded. Loan time passes only while the borrower is online
+and active: an installment falls due after `periodDays * 20` minutes of the
+borrower's active play (idle for over five minutes does not count), and a
+missed payment becomes a debt whose late rate also grows per 20 minutes of
+active play. Only the interest paid to a player lender is taxed, at
+`taxLoanBps`. `/loan repay` settles a loan for the principal left plus one
+period of interest. The lender's loan deed is a record: using it shows what
+is still owed.
 
 Bonds pay weekly (7 days) or monthly (30 days), and a coupon pays only while
 the bond sits in a bank vault and the vault owner was actively online for the
