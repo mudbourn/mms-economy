@@ -2,6 +2,7 @@ package info.mudbourn.mmseconomy.market;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.math.BlockPos;
@@ -31,14 +32,22 @@ public record ShopListing(UUID owner, String ownerName, BlockPos depot, String d
         return bare != null ? new ItemStack(bare) : ItemStack.EMPTY;
     }
 
-    // True when a barrel stack is this listing's item, components included when the listing recorded them.
+    // True when a barrel stack is this listing's item, non-display components included when the listing recorded them.
     public boolean matches(ItemStack candidate) {
         if (candidate.isEmpty()) {
             return false;
         }
         if (!stack.isEmpty()) {
-            return ItemStack.areItemsAndComponentsEqual(stack, candidate);
+            return ItemStack.areItemsAndComponentsEqual(withoutDisplay(stack), withoutDisplay(candidate));
         }
         return Registries.ITEM.getId(candidate.getItem()).toString().equals(item);
+    }
+
+    // A copy of the stack without the item name and lore a mod may rebuild between versions.
+    private static ItemStack withoutDisplay(ItemStack source) {
+        ItemStack copy = source.copy();
+        copy.remove(DataComponentTypes.ITEM_NAME);
+        copy.remove(DataComponentTypes.LORE);
+        return copy;
     }
 }
