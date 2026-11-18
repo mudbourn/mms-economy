@@ -2,12 +2,12 @@ package info.mudbourn.mmseconomy.market;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 // The global registry of shop listings, saved on the overworld so buyers can browse while owners are offline.
-public final class Market extends PersistentState {
+public final class Market extends SavedData {
 
     public static final Codec<Market> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         ShopListing.CODEC.listOf().fieldOf("listings").forGetter(market -> market.listings),
@@ -25,8 +25,8 @@ public final class Market extends PersistentState {
             .forGetter(market -> market.shopNames)
     ).apply(instance, Market::new));
 
-    public static final PersistentStateType<Market> TYPE = new PersistentStateType<>(
-        "mms_economy_market",
+    public static final SavedDataType<Market> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_market"),
         Market::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -47,7 +47,7 @@ public final class Market extends PersistentState {
     }
 
     public static Market get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // A read-only live view of every listing, in index order.
@@ -81,18 +81,18 @@ public final class Market extends PersistentState {
         } else {
             shopNames.put(shopKey(dimension, depot), name);
         }
-        markDirty();
+        setDirty();
     }
 
     public void add(ShopListing listing) {
         listings.add(listing);
-        markDirty();
+        setDirty();
     }
 
     public void removeAt(int index) {
         if (index >= 0 && index < listings.size()) {
             listings.remove(index);
-            markDirty();
+            setDirty();
         }
     }
 
@@ -100,7 +100,7 @@ public final class Market extends PersistentState {
     public int removeIf(java.util.function.Predicate<ShopListing> predicate) {
         int before = listings.size();
         if (listings.removeIf(predicate)) {
-            markDirty();
+            setDirty();
         }
         return before - listings.size();
     }

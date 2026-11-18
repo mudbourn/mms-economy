@@ -3,11 +3,11 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.block.BankBlock;
 import info.mudbourn.mmseconomy.registry.ModBlocks;
-import net.minecraft.block.BlockState;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 // Server-side proximity checks against placed bank blocks.
@@ -32,16 +32,16 @@ public final class BankAccess {
     }
 
     // Whether the player stands at a bank within the configured range, or has debug access.
-    public static boolean inReach(ServerPlayerEntity player) {
+    public static boolean inReach(ServerPlayer player) {
         return DebugAccess.has(player) || nearestBank(player, MmsEconomy.config().bankRange) != null;
     }
 
     // The bank block whose face the player is standing at within range, or null when none qualifies.
     @Nullable
-    public static BlockPos nearestBank(ServerPlayerEntity player, int range) {
-        ServerWorld world = player.getEntityWorld();
-        BlockPos origin = player.getBlockPos();
-        BlockPos.Mutable pos = new BlockPos.Mutable();
+    public static BlockPos nearestBank(ServerPlayer player, int range) {
+        ServerLevel world = player.level();
+        BlockPos origin = player.blockPosition();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         BlockPos best = null;
         double bestForward = Double.MAX_VALUE;
         int horizontal = Math.min(range, SCAN_HORIZONTAL);
@@ -53,12 +53,12 @@ public final class BankAccess {
                 for (int dz = -horizontal; dz <= horizontal; dz++) {
                     pos.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
                     BlockState state = world.getBlockState(pos);
-                    if (!state.isOf(ModBlocks.BANK)) {
+                    if (!state.is(ModBlocks.BANK)) {
                         continue;
                     }
                     double forward = forwardIfAtFace(player, pos, state);
                     if (forward >= 0.0 && forward < bestForward) {
-                        best = pos.toImmutable();
+                        best = pos.immutable();
                         bestForward = forward;
                     }
                 }
@@ -68,14 +68,14 @@ public final class BankAccess {
     }
 
     // Forward distance from the face when the player stands at it, or a negative sentinel otherwise.
-    private static double forwardIfAtFace(ServerPlayerEntity player, BlockPos pos, BlockState state) {
-        Direction front = state.get(BankBlock.FACING);
+    private static double forwardIfAtFace(ServerPlayer player, BlockPos pos, BlockState state) {
+        Direction front = state.getValue(BankBlock.FACING);
         double relX = player.getX() - (pos.getX() + 0.5);
         double relY = player.getY() - pos.getY();
         double relZ = player.getZ() - (pos.getZ() + 0.5);
 
-        double forward = relX * front.getOffsetX() + relZ * front.getOffsetZ();
-        double lateral = relX * front.getOffsetZ() - relZ * front.getOffsetX();
+        double forward = relX * front.getStepX() + relZ * front.getStepZ();
+        double lateral = relX * front.getStepZ() - relZ * front.getStepX();
 
         if (forward <= 0.3 || forward > MAX_FORWARD + 0.5) {
             return -1.0;

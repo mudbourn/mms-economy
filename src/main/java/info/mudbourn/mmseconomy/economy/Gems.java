@@ -2,12 +2,12 @@ package info.mudbourn.mmseconomy.economy;
 
 import info.mudbourn.mmseconomy.registry.ModBlocks;
 import info.mudbourn.mmseconomy.registry.ModItems;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-
 import java.util.List;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 // Converts physical gem stacks to and from a Pice value, largest denomination first.
 public final class Gems {
@@ -49,11 +49,11 @@ public final class Gems {
     }
 
     // The total Pice value of every gem the player is carrying.
-    public static long inventoryValue(ServerPlayerEntity player) {
+    public static long inventoryValue(ServerPlayer player) {
         long total = 0L;
-        int size = player.getInventory().size();
+        int size = player.getInventory().getContainerSize();
         for (int slot = 0; slot < size; slot++) {
-            ItemStack stack = player.getInventory().getStack(slot);
+            ItemStack stack = player.getInventory().getItem(slot);
             long unit = value(stack.getItem());
             if (unit > 0) {
                 total += unit * stack.getCount();
@@ -63,7 +63,7 @@ public final class Gems {
     }
 
     // Removes gems worth exactly amount, or returns false and removes nothing when that value cannot be assembled.
-    public static boolean removeExact(ServerPlayerEntity player, long amount) {
+    public static boolean removeExact(ServerPlayer player, long amount) {
         if (amount <= 0 || inventoryValue(player) < amount) {
             return false;
         }
@@ -101,7 +101,7 @@ public final class Gems {
     }
 
     // Gives the player gems worth amount, making change with the fewest stacks and dropping any that do not fit.
-    public static void give(ServerPlayerEntity player, long amount) {
+    public static void give(ServerPlayer player, long amount) {
         long ratio = Currency.ratio();
         long remaining = amount;
 
@@ -112,7 +112,7 @@ public final class Gems {
     }
 
     // Takes carried gems covering amount with the least overpay, returning the value taken, or -1 when short.
-    public static long tender(ServerPlayerEntity player, long amount) {
+    public static long tender(ServerPlayer player, long amount) {
         long total = inventoryValue(player);
         if (amount <= 0 || total < amount) {
             return -1L;
@@ -132,13 +132,13 @@ public final class Gems {
     }
 
     // Gives change as loose Colt and Pice gems, never storage blocks.
-    public static void giveChange(ServerPlayerEntity player, long amount) {
+    public static void giveChange(ServerPlayer player, long amount) {
         long remaining = grant(player, ModItems.COLT, amount, Currency.ratio());
         grant(player, ModItems.PICE, remaining, 1L);
     }
 
     // Puts amount into the barrels as Colt and Pice gems, returning the value that did not fit.
-    public static long stockBarrels(List<Inventory> barrels, long amount) {
+    public static long stockBarrels(List<Container> barrels, long amount) {
         long ratio = Currency.ratio();
         long colt = amount / ratio;
         long leftColt = fill(barrels, ModItems.COLT, colt);
@@ -147,48 +147,48 @@ public final class Gems {
     }
 
     // Inserts count of item into the barrels, topping up matching stacks before empty slots, and returns what did not fit.
-    private static long fill(List<Inventory> barrels, Item item, long count) {
+    private static long fill(List<Container> barrels, Item item, long count) {
         long remaining = count;
         for (boolean empties : new boolean[] {false, true}) {
-            for (Inventory barrel : barrels) {
-                for (int slot = 0; slot < barrel.size() && remaining > 0; slot++) {
-                    ItemStack stack = barrel.getStack(slot);
-                    if (!empties && stack.isOf(item)) {
-                        int add = (int) Math.min(remaining, stack.getMaxCount() - stack.getCount());
-                        stack.increment(add);
+            for (Container barrel : barrels) {
+                for (int slot = 0; slot < barrel.getContainerSize() && remaining > 0; slot++) {
+                    ItemStack stack = barrel.getItem(slot);
+                    if (!empties && stack.is(item)) {
+                        int add = (int) Math.min(remaining, stack.getMaxStackSize() - stack.getCount());
+                        stack.grow(add);
                         remaining -= add;
                     } else if (empties && stack.isEmpty()) {
                         ItemStack fresh = new ItemStack(item);
-                        int add = (int) Math.min(remaining, fresh.getMaxCount());
+                        int add = (int) Math.min(remaining, fresh.getMaxStackSize());
                         fresh.setCount(add);
-                        barrel.setStack(slot, fresh);
+                        barrel.setItem(slot, fresh);
                         remaining -= add;
                     }
                 }
-                barrel.markDirty();
+                barrel.setChanged();
             }
         }
         return remaining;
     }
 
-    private static long grant(ServerPlayerEntity player, Item item, long remaining, long unit) {
+    private static long grant(ServerPlayer player, Item item, long remaining, long unit) {
         long count = remaining / unit;
         while (count > 0) {
             int stackSize = (int) Math.min(count, 99L);
             ItemStack stack = new ItemStack(item, stackSize);
-            if (!player.getInventory().insertStack(stack)) {
-                player.dropItem(stack, false);
+            if (!player.getInventory().add(stack)) {
+                player.drop(stack, false, Prediction.SERVER_ONLY);
             }
             count -= stackSize;
         }
         return remaining % unit;
     }
 
-    private static long count(ServerPlayerEntity player, Item item) {
+    private static long count(ServerPlayer player, Item item) {
         long total = 0L;
-        int size = player.getInventory().size();
+        int size = player.getInventory().getContainerSize();
         for (int slot = 0; slot < size; slot++) {
-            ItemStack stack = player.getInventory().getStack(slot);
+            ItemStack stack = player.getInventory().getItem(slot);
             if (stack.getItem() == item) {
                 total += stack.getCount();
             }
@@ -196,16 +196,16 @@ public final class Gems {
         return total;
     }
 
-    private static void remove(ServerPlayerEntity player, Item item, long amount) {
+    private static void remove(ServerPlayer player, Item item, long amount) {
         long remaining = amount;
-        int size = player.getInventory().size();
+        int size = player.getInventory().getContainerSize();
         for (int slot = 0; slot < size && remaining > 0; slot++) {
-            ItemStack stack = player.getInventory().getStack(slot);
+            ItemStack stack = player.getInventory().getItem(slot);
             if (stack.getItem() != item) {
                 continue;
             }
             int take = (int) Math.min(remaining, stack.getCount());
-            player.getInventory().removeStack(slot, take);
+            player.getInventory().removeItem(slot, take);
             remaining -= take;
         }
     }

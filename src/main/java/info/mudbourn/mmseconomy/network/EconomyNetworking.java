@@ -32,20 +32,20 @@ import info.mudbourn.mmseconomy.market.ShopListing;
 import info.mudbourn.mmseconomy.registry.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Prediction;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -100,9 +100,9 @@ public final class EconomyNetworking {
                           List<BondOfferingRow> offerings, List<VaultBondRow> vault,
                           boolean wholesale, List<WholesaleOfferRow> wholesaleOffers,
                           List<WholesaleOrderRow> wholesaleOrders, List<LoanRow> loans, String bankLoanTerms)
-        implements CustomPayload {
-        public static final Id<OpenHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_hub"));
-        public static final PacketCodec<RegistryByteBuf, OpenHub> CODEC = PacketCodec.of(
+        implements CustomPacketPayload {
+        public static final Type<OpenHub> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "open_hub"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, OpenHub> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeLong(value.balance);
                 buf.writeLong(value.pocket);
@@ -116,32 +116,32 @@ public final class EconomyNetworking {
                 buf.writeVarInt(value.listings.size());
                 for (MarketRow row : value.listings) {
                     buf.writeVarInt(row.index());
-                    buf.writeString(row.name());
+                    buf.writeUtf(row.name());
                     buf.writeLong(row.price());
-                    buf.writeString(row.owner());
+                    buf.writeUtf(row.owner());
                     buf.writeVarInt(row.x());
                     buf.writeVarInt(row.y());
                     buf.writeVarInt(row.z());
                     buf.writeBoolean(row.buyable());
-                    buf.writeString(row.shopName());
-                    ItemStack.OPTIONAL_PACKET_CODEC.encode(buf, row.stack());
-                    buf.writeUuid(row.ownerId());
-                    buf.writeString(row.dimension());
+                    buf.writeUtf(row.shopName());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, row.stack());
+                    buf.writeUUID(row.ownerId());
+                    buf.writeUtf(row.dimension());
                 }
                 buf.writeVarInt(value.myListings.size());
                 for (ShopRow row : value.myListings) {
                     buf.writeVarInt(row.index());
-                    buf.writeString(row.name());
+                    buf.writeUtf(row.name());
                     buf.writeLong(row.price());
                     buf.writeVarInt(row.stock());
                     buf.writeBlockPos(row.depot());
-                    buf.writeString(row.shopName());
-                    ItemStack.OPTIONAL_PACKET_CODEC.encode(buf, row.stack());
+                    buf.writeUtf(row.shopName());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, row.stack());
                 }
                 buf.writeVarInt(value.shopCatalog.size());
                 for (ServerShopRow row : value.shopCatalog) {
-                    buf.writeString(row.itemId());
-                    buf.writeString(row.name());
+                    buf.writeUtf(row.itemId());
+                    buf.writeUtf(row.name());
                     buf.writeLong(row.sell());
                     buf.writeLong(row.buyPrice());
                     buf.writeVarInt(row.stock());
@@ -151,12 +151,12 @@ public final class EconomyNetworking {
                 buf.writeLong(value.treasury);
                 buf.writeVarInt(value.library.size());
                 for (LibraryRow row : value.library) {
-                    buf.writeString(row.itemId());
-                    buf.writeString(row.name());
+                    buf.writeUtf(row.itemId());
+                    buf.writeUtf(row.name());
                     buf.writeLong(row.count());
                     buf.writeLong(row.bought());
                 }
-                buf.writeString(value.focusOwner);
+                buf.writeUtf(value.focusOwner);
                 buf.writeBlockPos(value.focusDepot);
                 buf.writeVarInt(value.offerings.size());
                 for (BondOfferingRow row : value.offerings) {
@@ -166,33 +166,33 @@ public final class EconomyNetworking {
                     buf.writeVarInt(row.couponDays());
                     buf.writeVarInt(row.termDays());
                     buf.writeVarInt(row.remaining());
-                    buf.writeString(row.issuer());
+                    buf.writeUtf(row.issuer());
                     buf.writeBoolean(row.own());
                 }
                 buf.writeVarInt(value.vault.size());
                 for (VaultBondRow row : value.vault) {
                     buf.writeVarInt(row.index());
-                    buf.writeString(row.text());
+                    buf.writeUtf(row.text());
                 }
                 buf.writeBoolean(value.wholesale);
                 buf.writeVarInt(value.wholesaleOffers.size());
                 for (WholesaleOfferRow row : value.wholesaleOffers) {
                     buf.writeVarInt(row.id());
-                    ItemStack.OPTIONAL_PACKET_CODEC.encode(buf, row.stack());
-                    buf.writeString(row.name());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, row.stack());
+                    buf.writeUtf(row.name());
                     buf.writeVarInt(row.lotSize());
                     buf.writeLong(row.lotPrice());
-                    buf.writeString(row.seller());
+                    buf.writeUtf(row.seller());
                     buf.writeBoolean(row.own());
                 }
                 buf.writeVarInt(value.wholesaleOrders.size());
                 for (WholesaleOrderRow row : value.wholesaleOrders) {
                     buf.writeVarInt(row.id());
-                    ItemStack.OPTIONAL_PACKET_CODEC.encode(buf, row.stack());
-                    buf.writeString(row.name());
+                    ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, row.stack());
+                    buf.writeUtf(row.name());
                     buf.writeVarInt(row.items());
                     buf.writeLong(row.escrow());
-                    buf.writeString(row.other());
+                    buf.writeUtf(row.other());
                     buf.writeBoolean(row.incoming());
                     buf.writeBoolean(row.inTransit());
                     buf.writeVarInt(row.remaining());
@@ -200,11 +200,11 @@ public final class EconomyNetworking {
                 buf.writeVarInt(value.loans.size());
                 for (LoanRow row : value.loans) {
                     buf.writeVarInt(row.id());
-                    buf.writeString(row.text());
+                    buf.writeUtf(row.text());
                     buf.writeBoolean(row.owed());
                     buf.writeLong(row.payoff());
                 }
-                buf.writeString(value.bankLoanTerms);
+                buf.writeUtf(value.bankLoanTerms);
             },
             buf -> {
                 long balance = buf.readLong();
@@ -220,21 +220,21 @@ public final class EconomyNetworking {
                 List<MarketRow> listings = new ArrayList<>(listingCount);
                 for (int i = 0; i < listingCount; i++) {
                     listings.add(new MarketRow(
-                        buf.readVarInt(), buf.readString(), buf.readLong(), buf.readString(),
+                        buf.readVarInt(), buf.readUtf(), buf.readLong(), buf.readUtf(),
                         buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readBoolean(),
-                        buf.readString(), ItemStack.OPTIONAL_PACKET_CODEC.decode(buf),
-                        buf.readUuid(), buf.readString()));
+                        buf.readUtf(), ItemStack.OPTIONAL_STREAM_CODEC.decode(buf),
+                        buf.readUUID(), buf.readUtf()));
                 }
                 int myCount = buf.readVarInt();
                 List<ShopRow> mine = new ArrayList<>(myCount);
                 for (int i = 0; i < myCount; i++) {
-                    mine.add(new ShopRow(buf.readVarInt(), buf.readString(), buf.readLong(), buf.readVarInt(),
-                        buf.readBlockPos(), buf.readString(), ItemStack.OPTIONAL_PACKET_CODEC.decode(buf)));
+                    mine.add(new ShopRow(buf.readVarInt(), buf.readUtf(), buf.readLong(), buf.readVarInt(),
+                        buf.readBlockPos(), buf.readUtf(), ItemStack.OPTIONAL_STREAM_CODEC.decode(buf)));
                 }
                 int catalogCount = buf.readVarInt();
                 List<ServerShopRow> shopCatalog = new ArrayList<>(catalogCount);
                 for (int i = 0; i < catalogCount; i++) {
-                    shopCatalog.add(new ServerShopRow(buf.readString(), buf.readString(),
+                    shopCatalog.add(new ServerShopRow(buf.readUtf(), buf.readUtf(),
                         buf.readLong(), buf.readLong(), buf.readVarInt(), buf.readVarInt()));
                 }
                 boolean admin = buf.readBoolean();
@@ -242,45 +242,45 @@ public final class EconomyNetworking {
                 int libraryCount = buf.readVarInt();
                 List<LibraryRow> library = new ArrayList<>(libraryCount);
                 for (int i = 0; i < libraryCount; i++) {
-                    library.add(new LibraryRow(buf.readString(), buf.readString(),
+                    library.add(new LibraryRow(buf.readUtf(), buf.readUtf(),
                         buf.readLong(), buf.readLong()));
                 }
-                String focusOwner = buf.readString();
+                String focusOwner = buf.readUtf();
                 BlockPos focusDepot = buf.readBlockPos();
                 int offeringCount = buf.readVarInt();
                 List<BondOfferingRow> offerings = new ArrayList<>(offeringCount);
                 for (int i = 0; i < offeringCount; i++) {
                     offerings.add(new BondOfferingRow(buf.readVarInt(), buf.readLong(), buf.readVarInt(),
-                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readString(),
+                        buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readUtf(),
                         buf.readBoolean()));
                 }
                 int vaultCount = buf.readVarInt();
                 List<VaultBondRow> vault = new ArrayList<>(vaultCount);
                 for (int i = 0; i < vaultCount; i++) {
-                    vault.add(new VaultBondRow(buf.readVarInt(), buf.readString()));
+                    vault.add(new VaultBondRow(buf.readVarInt(), buf.readUtf()));
                 }
                 boolean wholesale = buf.readBoolean();
                 int wholesaleOfferCount = buf.readVarInt();
                 List<WholesaleOfferRow> wholesaleOffers = new ArrayList<>(wholesaleOfferCount);
                 for (int i = 0; i < wholesaleOfferCount; i++) {
                     wholesaleOffers.add(new WholesaleOfferRow(buf.readVarInt(),
-                        ItemStack.OPTIONAL_PACKET_CODEC.decode(buf), buf.readString(), buf.readVarInt(),
-                        buf.readLong(), buf.readString(), buf.readBoolean()));
+                        ItemStack.OPTIONAL_STREAM_CODEC.decode(buf), buf.readUtf(), buf.readVarInt(),
+                        buf.readLong(), buf.readUtf(), buf.readBoolean()));
                 }
                 int wholesaleOrderCount = buf.readVarInt();
                 List<WholesaleOrderRow> wholesaleOrders = new ArrayList<>(wholesaleOrderCount);
                 for (int i = 0; i < wholesaleOrderCount; i++) {
                     wholesaleOrders.add(new WholesaleOrderRow(buf.readVarInt(),
-                        ItemStack.OPTIONAL_PACKET_CODEC.decode(buf), buf.readString(), buf.readVarInt(),
-                        buf.readLong(), buf.readString(), buf.readBoolean(), buf.readBoolean(),
+                        ItemStack.OPTIONAL_STREAM_CODEC.decode(buf), buf.readUtf(), buf.readVarInt(),
+                        buf.readLong(), buf.readUtf(), buf.readBoolean(), buf.readBoolean(),
                         buf.readVarInt()));
                 }
                 int loanCount = buf.readVarInt();
                 List<LoanRow> loans = new ArrayList<>(loanCount);
                 for (int i = 0; i < loanCount; i++) {
-                    loans.add(new LoanRow(buf.readVarInt(), buf.readString(), buf.readBoolean(), buf.readLong()));
+                    loans.add(new LoanRow(buf.readVarInt(), buf.readUtf(), buf.readBoolean(), buf.readLong()));
                 }
-                String bankLoanTerms = buf.readString();
+                String bankLoanTerms = buf.readUtf();
                 return new OpenHub(balance, pocket, coltRatio, interestPercent, interestDays,
                     hasBank, occupied, nearDepot, mode, listings, mine, shopCatalog, admin, treasury, library,
                     focusOwner, focusDepot, offerings, vault, wholesale, wholesaleOffers, wholesaleOrders,
@@ -288,15 +288,15 @@ public final class EconomyNetworking {
             });
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
     public record OpenHistory(List<HistoryEntry> purchases, List<HistoryEntry> payments,
-                              List<HistoryEntry> deals, List<HistoryEntry> bills) implements CustomPayload {
-        public static final Id<OpenHistory> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "open_history"));
-        public static final PacketCodec<RegistryByteBuf, OpenHistory> CODEC = PacketCodec.of(
+                              List<HistoryEntry> deals, List<HistoryEntry> bills) implements CustomPacketPayload {
+        public static final Type<OpenHistory> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "open_history"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, OpenHistory> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 HistoryEntry.LIST_CODEC.encode(buf, value.purchases);
                 HistoryEntry.LIST_CODEC.encode(buf, value.payments);
@@ -310,14 +310,14 @@ public final class EconomyNetworking {
                 HistoryEntry.LIST_CODEC.decode(buf)));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BankAction(boolean deposit, boolean chips, long amount) implements CustomPayload {
-        public static final Id<BankAction> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bank_action"));
-        public static final PacketCodec<RegistryByteBuf, BankAction> CODEC = PacketCodec.of(
+    public record BankAction(boolean deposit, boolean chips, long amount) implements CustomPacketPayload {
+        public static final Type<BankAction> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "bank_action"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BankAction> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeBoolean(value.deposit);
                 buf.writeBoolean(value.chips);
@@ -326,27 +326,27 @@ public final class EconomyNetworking {
             buf -> new BankAction(buf.readBoolean(), buf.readBoolean(), buf.readLong()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BuyListing(int index) implements CustomPayload {
-        public static final Id<BuyListing> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "buy_listing"));
-        public static final PacketCodec<RegistryByteBuf, BuyListing> CODEC = PacketCodec.of(
+    public record BuyListing(int index) implements CustomPacketPayload {
+        public static final Type<BuyListing> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "buy_listing"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BuyListing> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.index),
             buf -> new BuyListing(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
     // A listing request; a null depot lists at the looked-at barrel wall instead of a chosen shop.
-    public record ListHeld(long price, BlockPos depot) implements CustomPayload {
-        public static final Id<ListHeld> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "list_held"));
-        public static final PacketCodec<RegistryByteBuf, ListHeld> CODEC = PacketCodec.of(
+    public record ListHeld(long price, BlockPos depot) implements CustomPacketPayload {
+        public static final Type<ListHeld> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "list_held"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ListHeld> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeLong(value.price);
                 buf.writeBoolean(value.depot != null);
@@ -357,174 +357,174 @@ public final class EconomyNetworking {
             buf -> new ListHeld(buf.readLong(), buf.readBoolean() ? buf.readBlockPos() : null));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record RenameShop(BlockPos depot, String name) implements CustomPayload {
-        public static final Id<RenameShop> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "rename_shop"));
-        public static final PacketCodec<RegistryByteBuf, RenameShop> CODEC = PacketCodec.of(
+    public record RenameShop(BlockPos depot, String name) implements CustomPacketPayload {
+        public static final Type<RenameShop> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "rename_shop"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, RenameShop> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeBlockPos(value.depot);
-                buf.writeString(value.name, Marketplace.MAX_SHOP_NAME);
+                buf.writeUtf(value.name, Marketplace.MAX_SHOP_NAME);
             },
-            buf -> new RenameShop(buf.readBlockPos(), buf.readString(Marketplace.MAX_SHOP_NAME)));
+            buf -> new RenameShop(buf.readBlockPos(), buf.readUtf(Marketplace.MAX_SHOP_NAME)));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record Unlist(int index) implements CustomPayload {
-        public static final Id<Unlist> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "unlist"));
-        public static final PacketCodec<RegistryByteBuf, Unlist> CODEC = PacketCodec.of(
+    public record Unlist(int index) implements CustomPacketPayload {
+        public static final Type<Unlist> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "unlist"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Unlist> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.index),
             buf -> new Unlist(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record ServerSell(String itemId, long count) implements CustomPayload {
-        public static final Id<ServerSell> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "server_sell"));
-        public static final PacketCodec<RegistryByteBuf, ServerSell> CODEC = PacketCodec.of(
+    public record ServerSell(String itemId, long count) implements CustomPacketPayload {
+        public static final Type<ServerSell> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "server_sell"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ServerSell> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
-                buf.writeString(value.itemId);
+                buf.writeUtf(value.itemId);
                 buf.writeLong(value.count);
             },
-            buf -> new ServerSell(buf.readString(), buf.readLong()));
+            buf -> new ServerSell(buf.readUtf(), buf.readLong()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BondBuy(int offeringId) implements CustomPayload {
-        public static final Id<BondBuy> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_buy"));
-        public static final PacketCodec<RegistryByteBuf, BondBuy> CODEC = PacketCodec.of(
+    public record BondBuy(int offeringId) implements CustomPacketPayload {
+        public static final Type<BondBuy> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "bond_buy"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BondBuy> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.offeringId),
             buf -> new BondBuy(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BondWithdraw(int index) implements CustomPayload {
-        public static final Id<BondWithdraw> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_withdraw"));
-        public static final PacketCodec<RegistryByteBuf, BondWithdraw> CODEC = PacketCodec.of(
+    public record BondWithdraw(int index) implements CustomPacketPayload {
+        public static final Type<BondWithdraw> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "bond_withdraw"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BondWithdraw> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.index),
             buf -> new BondWithdraw(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BondCancel(int offeringId) implements CustomPayload {
-        public static final Id<BondCancel> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_cancel"));
-        public static final PacketCodec<RegistryByteBuf, BondCancel> CODEC = PacketCodec.of(
+    public record BondCancel(int offeringId) implements CustomPacketPayload {
+        public static final Type<BondCancel> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "bond_cancel"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BondCancel> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.offeringId),
             buf -> new BondCancel(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record LoanRepay(int id) implements CustomPayload {
-        public static final Id<LoanRepay> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "loan_repay"));
-        public static final PacketCodec<RegistryByteBuf, LoanRepay> CODEC = PacketCodec.of(
+    public record LoanRepay(int id) implements CustomPacketPayload {
+        public static final Type<LoanRepay> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "loan_repay"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, LoanRepay> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.id),
             buf -> new LoanRepay(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record BondVault() implements CustomPayload {
-        public static final Id<BondVault> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "bond_vault"));
-        public static final PacketCodec<RegistryByteBuf, BondVault> CODEC = PacketCodec.unit(new BondVault());
+    public record BondVault() implements CustomPacketPayload {
+        public static final Type<BondVault> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "bond_vault"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, BondVault> CODEC = StreamCodec.unit(new BondVault());
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record ServerBuy(String itemId, long count) implements CustomPayload {
-        public static final Id<ServerBuy> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "server_buy"));
-        public static final PacketCodec<RegistryByteBuf, ServerBuy> CODEC = PacketCodec.of(
+    public record ServerBuy(String itemId, long count) implements CustomPacketPayload {
+        public static final Type<ServerBuy> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "server_buy"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ServerBuy> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
-                buf.writeString(value.itemId);
+                buf.writeUtf(value.itemId);
                 buf.writeLong(value.count);
             },
-            buf -> new ServerBuy(buf.readString(), buf.readLong()));
+            buf -> new ServerBuy(buf.readUtf(), buf.readLong()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record RequestHistory() implements CustomPayload {
-        public static final Id<RequestHistory> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "request_history"));
-        public static final PacketCodec<RegistryByteBuf, RequestHistory> CODEC = PacketCodec.unit(new RequestHistory());
+    public record RequestHistory() implements CustomPacketPayload {
+        public static final Type<RequestHistory> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "request_history"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, RequestHistory> CODEC = StreamCodec.unit(new RequestHistory());
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record RequestHub() implements CustomPayload {
-        public static final Id<RequestHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "request_hub"));
-        public static final PacketCodec<RegistryByteBuf, RequestHub> CODEC = PacketCodec.unit(new RequestHub());
+    public record RequestHub() implements CustomPacketPayload {
+        public static final Type<RequestHub> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "request_hub"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, RequestHub> CODEC = StreamCodec.unit(new RequestHub());
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record CloseHub() implements CustomPayload {
-        public static final Id<CloseHub> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "close_hub"));
-        public static final PacketCodec<RegistryByteBuf, CloseHub> CODEC = PacketCodec.unit(new CloseHub());
+    public record CloseHub() implements CustomPacketPayload {
+        public static final Type<CloseHub> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "close_hub"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, CloseHub> CODEC = StreamCodec.unit(new CloseHub());
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record RequestShopBook(String owner, BlockPos depot) implements CustomPayload {
-        public static final Id<RequestShopBook> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "request_shop_book"));
-        public static final PacketCodec<RegistryByteBuf, RequestShopBook> CODEC = PacketCodec.of(
+    public record RequestShopBook(String owner, BlockPos depot) implements CustomPacketPayload {
+        public static final Type<RequestShopBook> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "request_shop_book"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, RequestShopBook> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
-                buf.writeString(value.owner);
+                buf.writeUtf(value.owner);
                 buf.writeBlockPos(value.depot);
             },
-            buf -> new RequestShopBook(buf.readString(), buf.readBlockPos()));
+            buf -> new RequestShopBook(buf.readUtf(), buf.readBlockPos()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record WholesaleAdd(int lotSize, long lotPrice) implements CustomPayload {
-        public static final Id<WholesaleAdd> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "wholesale_add"));
-        public static final PacketCodec<RegistryByteBuf, WholesaleAdd> CODEC = PacketCodec.of(
+    public record WholesaleAdd(int lotSize, long lotPrice) implements CustomPacketPayload {
+        public static final Type<WholesaleAdd> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wholesale_add"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, WholesaleAdd> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeVarInt(value.lotSize);
                 buf.writeLong(value.lotPrice);
@@ -532,26 +532,26 @@ public final class EconomyNetworking {
             buf -> new WholesaleAdd(buf.readVarInt(), buf.readLong()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record WholesaleRemove(int offerId) implements CustomPayload {
-        public static final Id<WholesaleRemove> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "wholesale_remove"));
-        public static final PacketCodec<RegistryByteBuf, WholesaleRemove> CODEC = PacketCodec.of(
+    public record WholesaleRemove(int offerId) implements CustomPacketPayload {
+        public static final Type<WholesaleRemove> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wholesale_remove"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, WholesaleRemove> CODEC = StreamCodec.ofMember(
             (value, buf) -> buf.writeVarInt(value.offerId),
             buf -> new WholesaleRemove(buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
-    public record WholesaleOrderOffer(int offerId, int lots) implements CustomPayload {
-        public static final Id<WholesaleOrderOffer> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "wholesale_order"));
-        public static final PacketCodec<RegistryByteBuf, WholesaleOrderOffer> CODEC = PacketCodec.of(
+    public record WholesaleOrderOffer(int offerId, int lots) implements CustomPacketPayload {
+        public static final Type<WholesaleOrderOffer> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wholesale_order"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, WholesaleOrderOffer> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeVarInt(value.offerId);
                 buf.writeVarInt(value.lots);
@@ -559,43 +559,43 @@ public final class EconomyNetworking {
             buf -> new WholesaleOrderOffer(buf.readVarInt(), buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
     // A request against a shop listing, naming the listing by seller, depot, dimension and item.
     public record WholesaleRequest(UUID seller, BlockPos depot, String dimension, ItemStack stack,
-                                   int quantity, long total) implements CustomPayload {
-        public static final Id<WholesaleRequest> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "wholesale_request"));
-        public static final PacketCodec<RegistryByteBuf, WholesaleRequest> CODEC = PacketCodec.of(
+                                   int quantity, long total) implements CustomPacketPayload {
+        public static final Type<WholesaleRequest> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wholesale_request"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, WholesaleRequest> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
-                buf.writeUuid(value.seller);
+                buf.writeUUID(value.seller);
                 buf.writeBlockPos(value.depot);
-                buf.writeString(value.dimension);
-                ItemStack.OPTIONAL_PACKET_CODEC.encode(buf, value.stack);
+                buf.writeUtf(value.dimension);
+                ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, value.stack);
                 buf.writeVarInt(value.quantity);
                 buf.writeLong(value.total);
             },
-            buf -> new WholesaleRequest(buf.readUuid(), buf.readBlockPos(), buf.readString(),
-                ItemStack.OPTIONAL_PACKET_CODEC.decode(buf), buf.readVarInt(), buf.readLong()));
+            buf -> new WholesaleRequest(buf.readUUID(), buf.readBlockPos(), buf.readUtf(),
+                ItemStack.OPTIONAL_STREAM_CODEC.decode(buf), buf.readVarInt(), buf.readLong()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
     // Answers a wholesale order: the seller accepts or declines it, the buyer cancels it.
-    public record WholesaleRespond(int orderId, int action) implements CustomPayload {
+    public record WholesaleRespond(int orderId, int action) implements CustomPacketPayload {
         public static final int ACCEPT = 0;
 
         public static final int DECLINE = 1;
 
         public static final int CANCEL = 2;
 
-        public static final Id<WholesaleRespond> ID = new Id<>(Identifier.of(MmsEconomy.MOD_ID, "wholesale_respond"));
-        public static final PacketCodec<RegistryByteBuf, WholesaleRespond> CODEC = PacketCodec.of(
+        public static final Type<WholesaleRespond> ID = new Type<>(Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wholesale_respond"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, WholesaleRespond> CODEC = StreamCodec.ofMember(
             (value, buf) -> {
                 buf.writeVarInt(value.orderId);
                 buf.writeVarInt(value.action);
@@ -603,35 +603,35 @@ public final class EconomyNetworking {
             buf -> new WholesaleRespond(buf.readVarInt(), buf.readVarInt()));
 
         @Override
-        public Id<? extends CustomPayload> getId() {
+        public Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }
 
     public static void register() {
-        PayloadTypeRegistry.playS2C().register(OpenHub.ID, OpenHub.CODEC);
-        PayloadTypeRegistry.playS2C().register(OpenHistory.ID, OpenHistory.CODEC);
-        PayloadTypeRegistry.playC2S().register(BankAction.ID, BankAction.CODEC);
-        PayloadTypeRegistry.playC2S().register(BuyListing.ID, BuyListing.CODEC);
-        PayloadTypeRegistry.playC2S().register(ListHeld.ID, ListHeld.CODEC);
-        PayloadTypeRegistry.playC2S().register(Unlist.ID, Unlist.CODEC);
-        PayloadTypeRegistry.playC2S().register(RenameShop.ID, RenameShop.CODEC);
-        PayloadTypeRegistry.playC2S().register(ServerSell.ID, ServerSell.CODEC);
-        PayloadTypeRegistry.playC2S().register(ServerBuy.ID, ServerBuy.CODEC);
-        PayloadTypeRegistry.playC2S().register(BondBuy.ID, BondBuy.CODEC);
-        PayloadTypeRegistry.playC2S().register(BondWithdraw.ID, BondWithdraw.CODEC);
-        PayloadTypeRegistry.playC2S().register(BondVault.ID, BondVault.CODEC);
-        PayloadTypeRegistry.playC2S().register(BondCancel.ID, BondCancel.CODEC);
-        PayloadTypeRegistry.playC2S().register(LoanRepay.ID, LoanRepay.CODEC);
-        PayloadTypeRegistry.playC2S().register(WholesaleAdd.ID, WholesaleAdd.CODEC);
-        PayloadTypeRegistry.playC2S().register(WholesaleRemove.ID, WholesaleRemove.CODEC);
-        PayloadTypeRegistry.playC2S().register(WholesaleOrderOffer.ID, WholesaleOrderOffer.CODEC);
-        PayloadTypeRegistry.playC2S().register(WholesaleRequest.ID, WholesaleRequest.CODEC);
-        PayloadTypeRegistry.playC2S().register(WholesaleRespond.ID, WholesaleRespond.CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestHistory.ID, RequestHistory.CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestHub.ID, RequestHub.CODEC);
-        PayloadTypeRegistry.playC2S().register(CloseHub.ID, CloseHub.CODEC);
-        PayloadTypeRegistry.playC2S().register(RequestShopBook.ID, RequestShopBook.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(OpenHub.ID, OpenHub.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(OpenHistory.ID, OpenHistory.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BankAction.ID, BankAction.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BuyListing.ID, BuyListing.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ListHeld.ID, ListHeld.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Unlist.ID, Unlist.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(RenameShop.ID, RenameShop.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ServerSell.ID, ServerSell.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ServerBuy.ID, ServerBuy.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BondBuy.ID, BondBuy.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BondWithdraw.ID, BondWithdraw.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BondVault.ID, BondVault.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(BondCancel.ID, BondCancel.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(LoanRepay.ID, LoanRepay.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(WholesaleAdd.ID, WholesaleAdd.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(WholesaleRemove.ID, WholesaleRemove.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(WholesaleOrderOffer.ID, WholesaleOrderOffer.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(WholesaleRequest.ID, WholesaleRequest.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(WholesaleRespond.ID, WholesaleRespond.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(RequestHistory.ID, RequestHistory.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(RequestHub.ID, RequestHub.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(CloseHub.ID, CloseHub.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(RequestShopBook.ID, RequestShopBook.CODEC);
 
         registerAction(BankAction.ID, EconomyNetworking::handleBankAction);
         registerAction(BuyListing.ID, (player, payload) -> {
@@ -677,8 +677,8 @@ public final class EconomyNetworking {
             refresh(player);
         });
         registerAction(BondCancel.ID, (player, payload) -> {
-            BondMarket.cancel(player.getEntityWorld().getServer(), payload.offeringId(),
-                player.getUuid().toString());
+            BondMarket.cancel(player.level().getServer(), payload.offeringId(),
+                player.getUUID().toString());
             refresh(player);
         });
         registerAction(LoanRepay.ID, (player, payload) -> {
@@ -724,16 +724,16 @@ public final class EconomyNetworking {
         registerAction(RequestShopBook.ID, EconomyNetworking::giveShopBook);
     }
 
-    private static <T extends CustomPayload> void registerAction(CustomPayload.Id<T> id,
-                                                                 java.util.function.BiConsumer<ServerPlayerEntity, T> action) {
+    private static <T extends CustomPacketPayload> void registerAction(CustomPacketPayload.Type<T> id,
+                                                                 java.util.function.BiConsumer<ServerPlayer, T> action) {
         ServerPlayNetworking.registerGlobalReceiver(id, (payload, context) -> {
-            ServerPlayerEntity player = context.player();
-            player.getEntityWorld().getServer().execute(() -> action.accept(player, payload));
+            ServerPlayer player = context.player();
+            player.level().getServer().execute(() -> action.accept(player, payload));
         });
     }
 
-    public static void openHub(ServerPlayerEntity player, BlockPos bankPos) {
-        ServerWorld world = player.getEntityWorld();
+    public static void openHub(ServerPlayer player, BlockPos bankPos) {
+        ServerLevel world = player.level();
         boolean hasBank = bankPos != null;
         boolean occupiedByOther = false;
         if (hasBank) {
@@ -743,12 +743,12 @@ public final class EconomyNetworking {
                 playAt(world, bankPos, ModSounds.BANK_OPEN);
             }
         }
-        ServerPlayNetworking.send(player, snapshot(player, hasBank, occupiedByOther, "", BlockPos.ORIGIN));
+        ServerPlayNetworking.send(player, snapshot(player, hasBank, occupiedByOther, "", BlockPos.ZERO));
     }
 
     // Opens the market on the shop a shop book names, or tells the player it has closed.
-    public static void openShop(ServerPlayerEntity player, ShopBook.Target target) {
-        for (ShopListing listing : Market.get(player.getEntityWorld().getServer()).all()) {
+    public static void openShop(ServerPlayer player, ShopBook.Target target) {
+        for (ShopListing listing : Market.get(player.level().getServer()).all()) {
             if (listing.ownerName().equals(target.owner())
                 && listing.depot().equals(target.depot())
                 && listing.dimension().equals(target.dimension())) {
@@ -757,53 +757,53 @@ public final class EconomyNetworking {
                 return;
             }
         }
-        player.sendMessage(Text.literal("This shop has closed."), true);
+        player.sendOverlayMessage(Component.literal("This shop has closed."));
     }
 
     // Gives the player a shop book for the first listing at the named owner's depot.
-    private static void giveShopBook(ServerPlayerEntity player, RequestShopBook request) {
-        for (ShopListing listing : Market.get(player.getEntityWorld().getServer()).all()) {
+    private static void giveShopBook(ServerPlayer player, RequestShopBook request) {
+        for (ShopListing listing : Market.get(player.level().getServer()).all()) {
             if (listing.ownerName().equals(request.owner()) && listing.depot().equals(request.depot())) {
-                String shopName = Market.get(player.getEntityWorld().getServer())
+                String shopName = Market.get(player.level().getServer())
                     .shopName(listing.dimension(), listing.depot());
-                player.getInventory().offerOrDrop(ShopBook.create(listing, shopName));
+                player.getInventory().placeItemBackInInventory(ShopBook.create(listing, shopName), Prediction.SERVER_ONLY);
                 return;
             }
         }
-        player.sendMessage(Text.literal("That shop no longer exists."), false);
+        player.sendSystemMessage(Component.literal("That shop no longer exists."));
     }
 
-    private static boolean atBank(ServerPlayerEntity player) {
+    private static boolean atBank(ServerPlayer player) {
         return DebugAccess.has(player)
             || BankAccess.nearestBank(player, MmsEconomy.config().bankRange) != null;
     }
 
-    private static void refresh(ServerPlayerEntity player) {
+    private static void refresh(ServerPlayer player) {
         BlockPos bank = BankAccess.nearestBank(player, MmsEconomy.config().bankRange);
         boolean hasBank = bank != null;
         boolean occupiedByOther = hasBank && BankOccupancy.isOccupiedByOther(bank, player);
-        ServerPlayNetworking.send(player, snapshot(player, hasBank, occupiedByOther, "", BlockPos.ORIGIN));
+        ServerPlayNetworking.send(player, snapshot(player, hasBank, occupiedByOther, "", BlockPos.ZERO));
     }
 
-    private static OpenHub snapshot(ServerPlayerEntity player, boolean hasBank, boolean occupiedByOther,
+    private static OpenHub snapshot(ServerPlayer player, boolean hasBank, boolean occupiedByOther,
                                     String focusOwner, BlockPos focusDepot) {
-        ServerWorld world = player.getEntityWorld();
+        ServerLevel world = player.level();
         MinecraftServer server = world.getServer();
         Market market = Market.get(server);
         List<ShopListing> all = market.all();
-        String dimension = world.getRegistryKey().getValue().toString();
+        String dimension = world.dimension().identifier().toString();
         int depotRange = MmsEconomy.config().depotRange;
 
         List<MarketRow> listings = new ArrayList<>(all.size());
         List<ShopRow> mine = new ArrayList<>();
-        Map<BlockPos, List<Inventory>> depots = new HashMap<>();
+        Map<BlockPos, List<Container>> depots = new HashMap<>();
         boolean anyBuyable = false;
         for (int i = 0; i < all.size(); i++) {
             ShopListing listing = all.get(i);
             String name = Marketplace.displayName(listing);
             String shopName = market.shopName(listing.dimension(), listing.depot());
             ItemStack stack = listing.template();
-            boolean own = listing.owner().equals(player.getUuid());
+            boolean own = listing.owner().equals(player.getUUID());
             boolean sameDim = listing.dimension().equals(dimension);
             boolean buyable = !own && Marketplace.canReach(player, listing, server)
                 && stock(world, depots, listing) > 0;
@@ -819,7 +819,7 @@ public final class EconomyNetworking {
         }
 
         BlockPos depot = Depot.detectNear(player, depotRange);
-        boolean nearDepot = (depot != null && !market.depotClaimedByOther(depot, player.getUuid()))
+        boolean nearDepot = (depot != null && !market.depotClaimedByOther(depot, player.getUUID()))
             || Marketplace.ownsReachableDepot(player);
 
         info.mudbourn.mmseconomy.economy.ServerLibrary shelf =
@@ -845,8 +845,8 @@ public final class EconomyNetworking {
         boolean effectiveDepot = nearDepot || debug;
         int mode = hasBank ? 2 : ((anyBuyable || nearDepot) ? 1 : 0);
 
-        boolean admin = net.minecraft.server.command.CommandManager.GAMEMASTERS_CHECK
-            .allows(player.getPermissions()) || debug;
+        boolean admin = net.minecraft.commands.Commands.LEVEL_GAMEMASTERS
+            .check(player.permissions()) || debug;
         long treasury = admin ? info.mudbourn.mmseconomy.economy.Treasury.get(server).balance() : 0L;
         List<LibraryRow> library = new ArrayList<>();
         if (admin) {
@@ -864,7 +864,7 @@ public final class EconomyNetworking {
         for (BondOffering offering : obligations.offerings) {
             offerings.add(new BondOfferingRow(offering.id, offering.principal, offering.couponBps,
                 offering.couponDays, offering.termDays, offering.remaining, offering.issuerName,
-                offering.issuer.equals(player.getUuid().toString())));
+                offering.issuer.equals(player.getUUID().toString())));
         }
         List<VaultBondRow> vault = new ArrayList<>();
         List<Bond> vaulted = Bonds.vaulted(obligations, player);
@@ -872,7 +872,7 @@ public final class EconomyNetworking {
             vault.add(new VaultBondRow(i + 1, Bonds.describe(server, obligations, vaulted.get(i))));
         }
 
-        String playerId = player.getUuid().toString();
+        String playerId = player.getUUID().toString();
         List<LoanRow> loans = new ArrayList<>();
         for (Loan loan : Loans.involving(obligations, playerId)) {
             loans.add(new LoanRow(loan.id, Loans.describe(server, loan, playerId), loan.borrower.equals(playerId),
@@ -883,19 +883,19 @@ public final class EconomyNetworking {
         Wholesale wholesaleState = Wholesale.get(server);
         List<WholesaleOfferRow> wholesaleOffers = new ArrayList<>();
         for (WholesaleOffer offer : wholesaleState.offers) {
-            boolean own = offer.seller().equals(player.getUuid());
+            boolean own = offer.seller().equals(player.getUUID());
             if (own || WholesaleManager.live(server, offer.seller(), offer.depot())) {
                 wholesaleOffers.add(new WholesaleOfferRow(offer.id(), offer.stack(),
-                    offer.stack().getName().getString(), offer.lotSize(), offer.lotPrice(),
+                    offer.stack().getHoverName().getString(), offer.lotSize(), offer.lotPrice(),
                     offer.sellerName(), own));
             }
         }
         List<WholesaleOrderRow> wholesaleOrders = new ArrayList<>();
         for (WholesaleOrder order : wholesaleState.orders) {
-            boolean incoming = order.seller.equals(player.getUuid());
-            if (incoming || order.buyer.equals(player.getUuid())) {
+            boolean incoming = order.seller.equals(player.getUUID());
+            if (incoming || order.buyer.equals(player.getUUID())) {
                 wholesaleOrders.add(new WholesaleOrderRow(order.id, order.stack,
-                    order.stack.getName().getString(), order.items(), order.escrow,
+                    order.stack.getHoverName().getString(), order.items(), order.escrow,
                     incoming ? order.buyerName : order.sellerName, incoming, order.inTransit,
                     order.remaining));
             }
@@ -917,12 +917,12 @@ public final class EconomyNetworking {
     }
 
     // The listing's live stock, reading each depot's barrels at most once per snapshot.
-    private static int stock(ServerWorld world, Map<BlockPos, List<Inventory>> depots, ShopListing listing) {
-        List<Inventory> barrels = depots.computeIfAbsent(listing.depot(), depot -> Depot.barrels(world, depot));
+    private static int stock(ServerLevel world, Map<BlockPos, List<Container>> depots, ShopListing listing) {
+        List<Container> barrels = depots.computeIfAbsent(listing.depot(), depot -> Depot.barrels(world, depot));
         return Marketplace.stock(barrels, listing);
     }
 
-    public static void openHistory(ServerPlayerEntity player) {
+    public static void openHistory(ServerPlayer player) {
         ServerPlayNetworking.send(player, new OpenHistory(
             History.get(player, HistoryCategory.PURCHASE),
             History.get(player, HistoryCategory.PAYMENT),
@@ -930,11 +930,11 @@ public final class EconomyNetworking {
             History.get(player, HistoryCategory.BILL)));
     }
 
-    private static void handleBankAction(ServerPlayerEntity player, BankAction action) {
+    private static void handleBankAction(ServerPlayer player, BankAction action) {
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
         BlockPos bank = BankAccess.nearestBank(player, MmsEconomy.config().bankRange);
         if (!debug && (bank == null || BankOccupancy.isOccupiedByOther(bank, player))) {
-            player.sendMessage(Text.literal("This bank is not available."), false);
+            player.sendSystemMessage(Component.literal("This bank is not available."));
             return;
         }
         long amount = action.amount();
@@ -942,35 +942,34 @@ public final class EconomyNetworking {
             return;
         }
 
-        boolean gamemaster = net.minecraft.server.command.CommandManager.GAMEMASTERS_CHECK
-            .allows(player.getPermissions()) || debug;
+        boolean gamemaster = net.minecraft.commands.Commands.LEVEL_GAMEMASTERS
+            .check(player.permissions()) || debug;
         if (action.chips() && (!action.deposit() || !gamemaster)) {
-            player.sendMessage(Text.literal("Only admins can cash chips at the bank."), false);
+            player.sendSystemMessage(Component.literal("Only admins can cash chips at the bank."));
             return;
         }
 
         if (action.chips() && (!Chips.casinoLoaded() || amount % Chips.step() != 0)) {
-            player.sendMessage(
-                Text.literal("Chips come in multiples of " + Currency.format(Chips.step()) + "."),
-                false);
+            player.sendSystemMessage(
+                Component.literal("Chips come in multiples of " + Currency.format(Chips.step()) + "."));
             return;
         }
 
         if (action.chips() && action.deposit()) {
             if (!Chips.removeExact(player, amount)) {
-                player.sendMessage(Text.literal("You lack chips worth exactly that amount."), false);
+                player.sendSystemMessage(Component.literal("You lack chips worth exactly that amount."));
                 return;
             }
             Wallet.deposit(player, amount);
         } else if (action.deposit()) {
             if (!Gems.removeExact(player, amount)) {
-                player.sendMessage(Text.literal("You lack gems worth exactly that amount."), false);
+                player.sendSystemMessage(Component.literal("You lack gems worth exactly that amount."));
                 return;
             }
             Wallet.deposit(player, amount);
         } else {
             if (!Wallet.withdraw(player, amount)) {
-                player.sendMessage(Text.literal("Your balance is too low."), false);
+                player.sendSystemMessage(Component.literal("Your balance is too low."));
                 return;
             }
             Gems.give(player, amount);
@@ -993,8 +992,8 @@ public final class EconomyNetworking {
         return action.deposit() ? "Bank deposit" : "Bank withdrawal";
     }
 
-    private static void handleClose(ServerPlayerEntity player) {
-        ServerWorld world = player.getEntityWorld();
+    private static void handleClose(ServerPlayer player) {
+        ServerLevel world = player.level();
         BlockPos bank = BankAccess.nearestBank(player, MmsEconomy.config().bankRange);
         if (bank != null) {
             playAt(world, bank, ModSounds.BANK_CLOSE);
@@ -1002,7 +1001,7 @@ public final class EconomyNetworking {
         BankOccupancy.release(world, player);
     }
 
-    private static void playAt(ServerWorld world, BlockPos pos, SoundEvent sound) {
-        world.playSound(null, pos, sound, SoundCategory.BLOCKS, 1.0f, 1.0f);
+    private static void playAt(ServerLevel world, BlockPos pos, SoundEvent sound) {
+        world.playSound(null, pos, sound, SoundSource.BLOCKS, 1.0f, 1.0f);
     }
 }

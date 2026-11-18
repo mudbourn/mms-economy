@@ -16,18 +16,18 @@ import info.mudbourn.mmseconomy.economy.ServerLibrary;
 import info.mudbourn.mmseconomy.economy.Treasury;
 import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.market.Marketplace;
-import net.minecraft.command.CommandSource;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-
 import java.util.Map;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 // The /eco command tree plus the top-level /pay command.
 public final class EconomyCommand {
@@ -35,144 +35,144 @@ public final class EconomyCommand {
     private EconomyCommand() {
     }
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal("pay")
-            .then(CommandManager.argument("player", EntityArgumentType.player())
-                .then(CommandManager.argument("amount", StringArgumentType.word())
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("pay")
+            .then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("amount", StringArgumentType.word())
                     .executes(EconomyCommand::pay))));
 
         DealCommand.register(dispatcher);
 
         LendingCommand.register(dispatcher);
 
-        dispatcher.register(CommandManager.literal("eco")
+        dispatcher.register(Commands.literal("eco")
             .executes(EconomyCommand::openHub)
-            .then(CommandManager.literal("balance")
+            .then(Commands.literal("balance")
                 .executes(context -> balanceSelf(context.getSource()))
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+                .then(Commands.argument("player", EntityArgument.player())
+                    .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                     .executes(EconomyCommand::balanceOther)))
-            .then(CommandManager.literal("deposit")
-                .then(CommandManager.argument("amount", StringArgumentType.word())
+            .then(Commands.literal("deposit")
+                .then(Commands.argument("amount", StringArgumentType.word())
                     .executes(context -> deposit(context))))
-            .then(CommandManager.literal("withdraw")
-                .then(CommandManager.argument("amount", StringArgumentType.word())
+            .then(Commands.literal("withdraw")
+                .then(Commands.argument("amount", StringArgumentType.word())
                     .executes(context -> withdraw(context))))
-            .then(CommandManager.literal("history")
+            .then(Commands.literal("history")
                 .executes(context -> history(context.getSource(), context.getSource().getPlayer())))
-            .then(CommandManager.literal("market")
+            .then(Commands.literal("market")
                 .executes(context -> {
-                    info.mudbourn.mmseconomy.market.Marketplace.browse(context.getSource().getPlayerOrThrow());
+                    info.mudbourn.mmseconomy.market.Marketplace.browse(context.getSource().getPlayerOrException());
                     return 1;
                 })
-                .then(CommandManager.literal("buy")
-                    .then(CommandManager.argument("index", IntegerArgumentType.integer(0))
+                .then(Commands.literal("buy")
+                    .then(Commands.argument("index", IntegerArgumentType.integer(0))
                         .executes(context -> {
                             info.mudbourn.mmseconomy.market.Marketplace.buy(
-                                context.getSource().getPlayerOrThrow(),
+                                context.getSource().getPlayerOrException(),
                                 IntegerArgumentType.getInteger(context, "index"));
                             return 1;
                         }))))
-            .then(CommandManager.literal("shop")
-                .then(CommandManager.literal("list")
-                    .then(CommandManager.argument("price", StringArgumentType.word())
+            .then(Commands.literal("shop")
+                .then(Commands.literal("list")
+                    .then(Commands.argument("price", StringArgumentType.word())
                         .executes(EconomyCommand::shopList)))
-                .then(CommandManager.literal("unlist")
-                    .then(CommandManager.argument("index", IntegerArgumentType.integer(0))
+                .then(Commands.literal("unlist")
+                    .then(Commands.argument("index", IntegerArgumentType.integer(0))
                         .executes(context -> {
                             info.mudbourn.mmseconomy.market.Marketplace.unlist(
-                                context.getSource().getPlayerOrThrow(),
+                                context.getSource().getPlayerOrException(),
                                 IntegerArgumentType.getInteger(context, "index"));
                             return 1;
                         }))))
-            .then(CommandManager.literal("sell")
-                .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+            .then(Commands.literal("sell")
+                .then(Commands.argument("count", IntegerArgumentType.integer(1))
                     .executes(context -> {
                         info.mudbourn.mmseconomy.market.Marketplace.serverSell(
-                            context.getSource().getPlayerOrThrow(),
+                            context.getSource().getPlayerOrException(),
                             IntegerArgumentType.getInteger(context, "count"));
                         return 1;
                     })))
-            .then(CommandManager.literal("buylist")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-                .then(CommandManager.literal("reload")
+            .then(Commands.literal("buylist")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .then(Commands.literal("reload")
                     .executes(context -> {
                         info.mudbourn.mmseconomy.market.ServerBuyList.load();
-                        context.getSource().sendFeedback(() -> Text.literal("Reloaded the server buy-list."), true);
+                        context.getSource().sendSuccess(() -> Component.literal("Reloaded the server buy-list."), true);
                         return 1;
                     })))
-            .then(CommandManager.literal("library")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+            .then(Commands.literal("library")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .executes(context -> libraryList(context.getSource()))
-                .then(CommandManager.literal("list")
+                .then(Commands.literal("list")
                     .executes(context -> libraryList(context.getSource())))
-                .then(CommandManager.literal("withdraw")
-                    .then(CommandManager.argument("item", StringArgumentType.string())
-                        .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                .then(Commands.literal("withdraw")
+                    .then(Commands.argument("item", StringArgumentType.string())
+                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
                             ServerLibrary.get(ctx.getSource().getServer()).view().keySet(), builder))
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
                             .executes(EconomyCommand::libraryWithdraw)))))
-            .then(CommandManager.literal("debug")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-                .then(CommandManager.literal("mint")
-                    .then(CommandManager.argument("amount", StringArgumentType.word())
+            .then(Commands.literal("debug")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .then(Commands.literal("mint")
+                    .then(Commands.argument("amount", StringArgumentType.word())
                         .executes(EconomyCommand::debugMint)))
-                .then(CommandManager.literal("access")
+                .then(Commands.literal("access")
                     .executes(EconomyCommand::debugAccess))
-                .then(CommandManager.literal("open")
+                .then(Commands.literal("open")
                     .executes(EconomyCommand::debugOpen)))
-            .then(CommandManager.literal("give")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .then(CommandManager.argument("amount", StringArgumentType.word())
+            .then(Commands.literal("give")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .then(Commands.argument("player", EntityArgument.player())
+                    .then(Commands.argument("amount", StringArgumentType.word())
                         .executes(context -> give(context, true)))))
-            .then(CommandManager.literal("take")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-                .then(CommandManager.argument("player", EntityArgumentType.player())
-                    .then(CommandManager.argument("amount", StringArgumentType.word())
+            .then(Commands.literal("take")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .then(Commands.argument("player", EntityArgument.player())
+                    .then(Commands.argument("amount", StringArgumentType.word())
                         .executes(context -> give(context, false)))))
-            .then(CommandManager.literal("treasury")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
-                .then(CommandManager.literal("balance")
+            .then(Commands.literal("treasury")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .then(Commands.literal("balance")
                     .executes(context -> treasuryBalance(context.getSource())))
-                .then(CommandManager.literal("pay")
-                    .then(CommandManager.argument("player", EntityArgumentType.player())
-                        .then(CommandManager.argument("amount", StringArgumentType.word())
+                .then(Commands.literal("pay")
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("amount", StringArgumentType.word())
                             .executes(context -> treasuryMove(context, true)))))
-                .then(CommandManager.literal("take")
-                    .then(CommandManager.argument("player", EntityArgumentType.player())
-                        .then(CommandManager.argument("amount", StringArgumentType.word())
+                .then(Commands.literal("take")
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("amount", StringArgumentType.word())
                             .executes(context -> treasuryMove(context, false))))))
-            .then(CommandManager.literal("config")
-                .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
+            .then(Commands.literal("config")
+                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .executes(context -> showConfig(context.getSource()))
-                .then(CommandManager.argument("key", StringArgumentType.word())
-                    .suggests((ctx, builder) -> CommandSource.suggestMatching(EconomyConfig.KEYS, builder))
-                    .then(CommandManager.argument("value", StringArgumentType.word())
+                .then(Commands.argument("key", StringArgumentType.word())
+                    .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(EconomyConfig.KEYS, builder))
+                    .then(Commands.argument("value", StringArgumentType.word())
                         .executes(context -> setConfig(context.getSource(),
                             StringArgumentType.getString(context, "key"),
                             StringArgumentType.getString(context, "value")))))));
     }
 
-    private static long parseAmount(ServerCommandSource source, String text) {
+    private static long parseAmount(CommandSourceStack source, String text) {
         long pice = Currency.parse(text);
         if (pice <= 0) {
-            source.sendError(Text.literal("Enter an amount like 12.34 or a whole number of Pice."));
+            source.sendFailure(Component.literal("Enter an amount like 12.34 or a whole number of Pice."));
         }
         return pice;
     }
 
-    private static int pay(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
+    private static int pay(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
         if (!MmsEconomy.config().payEnabled) {
-            source.sendError(Text.literal("Payments are disabled."));
+            source.sendFailure(Component.literal("Payments are disabled."));
             return 0;
         }
 
-        ServerPlayerEntity sender = source.getPlayerOrThrow();
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
+        ServerPlayer sender = source.getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(context, "player");
         if (sender == target) {
-            source.sendError(Text.literal("You cannot pay yourself."));
+            source.sendFailure(Component.literal("You cannot pay yourself."));
             return 0;
         }
 
@@ -181,13 +181,13 @@ public final class EconomyCommand {
             return 0;
         }
         if (!Wallet.canAfford(sender, amount)) {
-            source.sendError(Text.literal("You only have " + Currency.format(Wallet.balance(sender)) + "."));
+            source.sendFailure(Component.literal("You only have " + Currency.format(Wallet.balance(sender)) + "."));
             return 0;
         }
 
         Tax.Settlement settlement = Tax.settleTaxed(sender, target, amount, TaxKind.PAY);
         if (settlement == null) {
-            source.sendError(Text.literal("Payment failed."));
+            source.sendFailure(Component.literal("Payment failed."));
             return 0;
         }
 
@@ -199,35 +199,35 @@ public final class EconomyCommand {
             day, info.mudbourn.mmseconomy.history.HistoryCategory.PAYMENT, "", 0,
             settlement.gross(), settlement.tax(), settlement.net(), sender.getName().getString()));
 
-        sender.sendMessage(Text.literal("Paid " + target.getName().getString()
+        sender.sendSystemMessage(Component.literal("Paid " + target.getName().getString()
             + ": sent " + Currency.format(settlement.gross())
             + ", tax " + Currency.format(settlement.tax())
-            + ", net " + Currency.format(settlement.net()) + "."), false);
-        target.sendMessage(Text.literal("Received " + Currency.format(settlement.net())
+            + ", net " + Currency.format(settlement.net()) + "."));
+        target.sendSystemMessage(Component.literal("Received " + Currency.format(settlement.net())
             + " from " + sender.getName().getString()
-            + " (tax " + Currency.format(settlement.tax()) + ")."), false);
+            + " (tax " + Currency.format(settlement.tax()) + ")."));
         return 1;
     }
 
-    private static int balanceSelf(ServerCommandSource source) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
-        source.sendFeedback(() -> Text.literal("Balance: " + Currency.format(Wallet.balance(player))), false);
+    private static int balanceSelf(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        source.sendSuccess(() -> Component.literal("Balance: " + Currency.format(Wallet.balance(player))), false);
         return 1;
     }
 
-    private static int balanceOther(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
-        context.getSource().sendFeedback(() -> Text.literal(target.getName().getString()
+    private static int balanceOther(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(context, "player");
+        context.getSource().sendSuccess(() -> Component.literal(target.getName().getString()
             + " balance: " + Currency.format(Wallet.balance(target))), false);
         return 1;
     }
 
-    private static int deposit(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity player = source.getPlayerOrThrow();
+    private static int deposit(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
         if (!info.mudbourn.mmseconomy.economy.DebugAccess.has(player)
             && BankAccess.nearestBank(player, MmsEconomy.config().bankRange) == null) {
-            source.sendError(Text.literal("Stand near a bank block to use it."));
+            source.sendFailure(Component.literal("Stand near a bank block to use it."));
             return 0;
         }
 
@@ -236,22 +236,22 @@ public final class EconomyCommand {
             return 0;
         }
         if (!Gems.removeExact(player, amount)) {
-            source.sendError(Text.literal("You do not have gems worth exactly " + Currency.format(amount) + "."));
+            source.sendFailure(Component.literal("You do not have gems worth exactly " + Currency.format(amount) + "."));
             return 0;
         }
 
         Wallet.deposit(player, amount);
-        source.sendFeedback(() -> Text.literal("Deposited " + Currency.format(amount)
+        source.sendSuccess(() -> Component.literal("Deposited " + Currency.format(amount)
             + ". Balance: " + Currency.format(Wallet.balance(player))), false);
         return 1;
     }
 
-    private static int withdraw(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity player = source.getPlayerOrThrow();
+    private static int withdraw(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
         if (!info.mudbourn.mmseconomy.economy.DebugAccess.has(player)
             && BankAccess.nearestBank(player, MmsEconomy.config().bankRange) == null) {
-            source.sendError(Text.literal("Stand near a bank block to use it."));
+            source.sendFailure(Component.literal("Stand near a bank block to use it."));
             return 0;
         }
 
@@ -260,19 +260,19 @@ public final class EconomyCommand {
             return 0;
         }
         if (!Wallet.withdraw(player, amount)) {
-            source.sendError(Text.literal("You only have " + Currency.format(Wallet.balance(player)) + "."));
+            source.sendFailure(Component.literal("You only have " + Currency.format(Wallet.balance(player)) + "."));
             return 0;
         }
 
         Gems.give(player, amount);
-        source.sendFeedback(() -> Text.literal("Withdrew " + Currency.format(amount)
+        source.sendSuccess(() -> Component.literal("Withdrew " + Currency.format(amount)
             + ". Balance: " + Currency.format(Wallet.balance(player))), false);
         return 1;
     }
 
-    private static int give(CommandContext<ServerCommandSource> context, boolean add) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
+    private static int give(CommandContext<CommandSourceStack> context, boolean add) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer target = EntityArgument.getPlayer(context, "player");
         long amount = parseAmount(source, StringArgumentType.getString(context, "amount"));
         if (amount <= 0) {
             return 0;
@@ -280,78 +280,78 @@ public final class EconomyCommand {
 
         if (add) {
             Wallet.deposit(target, amount);
-            source.sendFeedback(() -> Text.literal("Gave " + Currency.format(amount)
+            source.sendSuccess(() -> Component.literal("Gave " + Currency.format(amount)
                 + " to " + target.getName().getString() + "."), true);
         } else {
             if (!Wallet.withdraw(target, amount)) {
-                source.sendError(Text.literal(target.getName().getString()
+                source.sendFailure(Component.literal(target.getName().getString()
                     + " only has " + Currency.format(Wallet.balance(target)) + "."));
                 return 0;
             }
-            source.sendFeedback(() -> Text.literal("Took " + Currency.format(amount)
+            source.sendSuccess(() -> Component.literal("Took " + Currency.format(amount)
                 + " from " + target.getName().getString() + "."), true);
         }
         return 1;
     }
 
-    private static int libraryList(ServerCommandSource source) {
+    private static int libraryList(CommandSourceStack source) {
         Map<String, Long> items = ServerLibrary.get(source.getServer()).view();
         if (items.isEmpty()) {
-            source.sendFeedback(() -> Text.literal("The server library is empty."), false);
+            source.sendSuccess(() -> Component.literal("The server library is empty."), false);
             return 1;
         }
-        source.sendFeedback(() -> Text.literal("Server library (" + items.size() + " kinds):"), false);
+        source.sendSuccess(() -> Component.literal("Server library (" + items.size() + " kinds):"), false);
         for (Map.Entry<String, Long> entry : items.entrySet()) {
-            source.sendFeedback(() -> Text.literal("  " + Marketplace.displayName(entry.getKey())
+            source.sendSuccess(() -> Component.literal("  " + Marketplace.displayName(entry.getKey())
                 + " x" + entry.getValue() + "  (" + entry.getKey() + ")"), false);
         }
         return 1;
     }
 
-    private static int libraryWithdraw(CommandContext<ServerCommandSource> context)
+    private static int libraryWithdraw(CommandContext<CommandSourceStack> context)
             throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity player = source.getPlayerOrThrow();
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
         String itemId = StringArgumentType.getString(context, "item");
         int count = IntegerArgumentType.getInteger(context, "count");
         Item item = Marketplace.itemOf(itemId);
         if (item == null || item == Items.AIR) {
-            source.sendError(Text.literal("Unknown item: " + itemId));
+            source.sendFailure(Component.literal("Unknown item: " + itemId));
             return 0;
         }
 
         long taken = ServerLibrary.get(source.getServer()).take(itemId, count);
         if (taken <= 0) {
-            source.sendError(Text.literal("The library holds none of that."));
+            source.sendFailure(Component.literal("The library holds none of that."));
             return 0;
         }
 
-        int maxStack = new ItemStack(item).getMaxCount();
+        int maxStack = new ItemStack(item).getMaxStackSize();
         long remaining = taken;
         while (remaining > 0) {
             int per = (int) Math.min(remaining, maxStack);
             ItemStack stack = new ItemStack(item, per);
-            if (!player.getInventory().insertStack(stack)) {
-                player.dropItem(stack, false);
+            if (!player.getInventory().add(stack)) {
+                player.drop(stack, false, Prediction.SERVER_ONLY);
             }
             remaining -= per;
         }
         long withdrawn = taken;
-        source.sendFeedback(() -> Text.literal("Withdrew " + withdrawn + " "
+        source.sendSuccess(() -> Component.literal("Withdrew " + withdrawn + " "
             + Marketplace.displayName(itemId) + " from the library."), true);
         return 1;
     }
 
-    private static int treasuryBalance(ServerCommandSource source) {
+    private static int treasuryBalance(CommandSourceStack source) {
         long balance = Treasury.get(source.getServer()).balance();
-        source.sendFeedback(() -> Text.literal("Treasury: " + Currency.format(balance)), false);
+        source.sendSuccess(() -> Component.literal("Treasury: " + Currency.format(balance)), false);
         return 1;
     }
 
-    private static int treasuryMove(CommandContext<ServerCommandSource> context, boolean pay)
+    private static int treasuryMove(CommandContext<CommandSourceStack> context, boolean pay)
             throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity target = EntityArgumentType.getPlayer(context, "player");
+        CommandSourceStack source = context.getSource();
+        ServerPlayer target = EntityArgument.getPlayer(context, "player");
         long amount = parseAmount(source, StringArgumentType.getString(context, "amount"));
         if (amount <= 0) {
             return 0;
@@ -360,88 +360,88 @@ public final class EconomyCommand {
         Treasury treasury = Treasury.get(source.getServer());
         if (pay) {
             if (!treasury.debit(amount)) {
-                source.sendError(Text.literal("Treasury holds only " + Currency.format(treasury.balance()) + "."));
+                source.sendFailure(Component.literal("Treasury holds only " + Currency.format(treasury.balance()) + "."));
                 return 0;
             }
             Wallet.deposit(target, amount);
-            source.sendFeedback(() -> Text.literal("Disbursed " + Currency.format(amount)
+            source.sendSuccess(() -> Component.literal("Disbursed " + Currency.format(amount)
                 + " to " + target.getName().getString() + "."), true);
         } else {
             if (!Wallet.withdraw(target, amount)) {
-                source.sendError(Text.literal(target.getName().getString()
+                source.sendFailure(Component.literal(target.getName().getString()
                     + " only has " + Currency.format(Wallet.balance(target)) + "."));
                 return 0;
             }
             treasury.credit(amount);
-            source.sendFeedback(() -> Text.literal("Collected " + Currency.format(amount)
+            source.sendSuccess(() -> Component.literal("Collected " + Currency.format(amount)
                 + " from " + target.getName().getString() + " into the treasury."), true);
         }
         return 1;
     }
 
-    private static int showConfig(ServerCommandSource source) {
-        source.sendFeedback(() -> Text.literal("Economy config: " + MmsEconomy.config().describe()), false);
+    private static int showConfig(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("Economy config: " + MmsEconomy.config().describe()), false);
         return 1;
     }
 
-    private static int setConfig(ServerCommandSource source, String key, String value) {
+    private static int setConfig(CommandSourceStack source, String key, String value) {
         if (!MmsEconomy.config().set(key, value)) {
-            source.sendError(Text.literal("Unknown config key or bad value: " + key + " = " + value + "."));
+            source.sendFailure(Component.literal("Unknown config key or bad value: " + key + " = " + value + "."));
             return 0;
         }
-        source.sendFeedback(() -> Text.literal("Set " + key + " = " + value + "."), true);
+        source.sendSuccess(() -> Component.literal("Set " + key + " = " + value + "."), true);
         return 1;
     }
 
-    private static int debugMint(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
-        ServerPlayerEntity player = source.getPlayerOrThrow();
+    private static int debugMint(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
         long amount = parseAmount(source, StringArgumentType.getString(context, "amount"));
         if (amount <= 0) {
             return 0;
         }
         Wallet.deposit(player, amount);
-        source.sendFeedback(() -> Text.literal("Minted " + Currency.format(amount)
+        source.sendSuccess(() -> Component.literal("Minted " + Currency.format(amount)
             + ". Balance: " + Currency.format(Wallet.balance(player))), false);
         return 1;
     }
 
-    private static int debugAccess(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
+    private static int debugAccess(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
         boolean enabled = info.mudbourn.mmseconomy.economy.DebugAccess.toggle(player);
-        context.getSource().sendFeedback(() -> Text.literal("Debug full-UI access "
+        context.getSource().sendSuccess(() -> Component.literal("Debug full-UI access "
             + (enabled ? "enabled" : "disabled") + "."), false);
         return 1;
     }
 
-    private static int debugOpen(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
+    private static int debugOpen(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
         info.mudbourn.mmseconomy.network.EconomyNetworking.openHub(player,
             BankAccess.nearestBank(player, MmsEconomy.config().bankRange));
         return 1;
     }
 
-    private static int shopList(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
+    private static int shopList(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
         long price = Currency.parse(StringArgumentType.getString(context, "price"));
         if (price <= 0) {
-            source.sendError(Text.literal("Set a price like 12.34 or a whole number of Pice."));
+            source.sendFailure(Component.literal("Set a price like 12.34 or a whole number of Pice."));
             return 0;
         }
-        info.mudbourn.mmseconomy.market.Marketplace.list(source.getPlayerOrThrow(), price, null);
+        info.mudbourn.mmseconomy.market.Marketplace.list(source.getPlayerOrException(), price, null);
         return 1;
     }
 
-    private static int openHub(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
+    private static int openHub(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
         BlockPos bank = BankAccess.nearestBank(player, MmsEconomy.config().bankRange);
         info.mudbourn.mmseconomy.network.EconomyNetworking.openHub(player, bank);
         return 1;
     }
 
-    private static int history(ServerCommandSource source, ServerPlayerEntity player) {
+    private static int history(CommandSourceStack source, ServerPlayer player) {
         if (player == null) {
-            source.sendError(Text.literal("Only a player has a history."));
+            source.sendFailure(Component.literal("Only a player has a history."));
             return 0;
         }
         info.mudbourn.mmseconomy.network.EconomyNetworking.openHistory(player);

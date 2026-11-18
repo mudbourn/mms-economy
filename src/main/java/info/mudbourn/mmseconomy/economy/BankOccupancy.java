@@ -2,12 +2,11 @@ package info.mudbourn.mmseconomy.economy;
 
 import info.mudbourn.mmseconomy.block.BankBlock;
 import info.mudbourn.mmseconomy.registry.ModBlocks;
-import net.minecraft.block.BlockState;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -28,7 +27,7 @@ public final class BankOccupancy {
     public static void scrubOnLoad(MinecraftServer server) {
         OccupiedBanks saved = OccupiedBanks.get(server);
         for (OccupiedBanks.Entry entry : saved.view()) {
-            ServerWorld world = worldFor(server, entry.dimension());
+            ServerLevel world = worldFor(server, entry.dimension());
             if (world != null) {
                 setLit(world, entry.pos(), false);
             }
@@ -37,42 +36,42 @@ public final class BankOccupancy {
         OCCUPANTS.clear();
     }
 
-    private static ServerWorld worldFor(MinecraftServer server, String dimension) {
-        for (ServerWorld world : server.getWorlds()) {
-            if (world.getRegistryKey().getValue().toString().equals(dimension)) {
+    private static ServerLevel worldFor(MinecraftServer server, String dimension) {
+        for (ServerLevel world : server.getAllLevels()) {
+            if (world.dimension().identifier().toString().equals(dimension)) {
                 return world;
             }
         }
         return null;
     }
 
-    private static String dimensionOf(ServerWorld world) {
-        return world.getRegistryKey().getValue().toString();
+    private static String dimensionOf(ServerLevel world) {
+        return world.dimension().identifier().toString();
     }
 
-    public static boolean isOccupiedByOther(BlockPos pos, ServerPlayerEntity player) {
+    public static boolean isOccupiedByOther(BlockPos pos, ServerPlayer player) {
         UUID occupant = OCCUPANTS.get(pos);
-        return occupant != null && !occupant.equals(player.getUuid());
+        return occupant != null && !occupant.equals(player.getUUID());
     }
 
     // Binds the block to the player if free or already theirs, mirroring the lit state.
-    public static boolean claim(ServerWorld world, BlockPos pos, ServerPlayerEntity player) {
+    public static boolean claim(ServerLevel world, BlockPos pos, ServerPlayer player) {
         UUID occupant = OCCUPANTS.get(pos);
-        if (occupant != null && !occupant.equals(player.getUuid())) {
+        if (occupant != null && !occupant.equals(player.getUUID())) {
             return false;
         }
-        OCCUPANTS.put(pos.toImmutable(), player.getUuid());
+        OCCUPANTS.put(pos.immutable(), player.getUUID());
         setLit(world, pos, true);
         OccupiedBanks.get(world.getServer()).add(dimensionOf(world), pos);
         return true;
     }
 
     // Frees every block held by the player.
-    public static void release(ServerWorld world, ServerPlayerEntity player) {
+    public static void release(ServerLevel world, ServerPlayer player) {
         OccupiedBanks saved = OccupiedBanks.get(world.getServer());
         String dimension = dimensionOf(world);
         OCCUPANTS.entrySet().removeIf(entry -> {
-            if (entry.getValue().equals(player.getUuid())) {
+            if (entry.getValue().equals(player.getUUID())) {
                 setLit(world, entry.getKey(), false);
                 saved.remove(dimension, entry.getKey());
                 return true;
@@ -81,10 +80,10 @@ public final class BankOccupancy {
         });
     }
 
-    private static void setLit(ServerWorld world, BlockPos pos, boolean lit) {
+    private static void setLit(ServerLevel world, BlockPos pos, boolean lit) {
         BlockState state = world.getBlockState(pos);
-        if (state.isOf(ModBlocks.BANK) && state.get(BankBlock.OCCUPIED) != lit) {
-            world.setBlockState(pos, state.with(BankBlock.OCCUPIED, lit));
+        if (state.is(ModBlocks.BANK) && state.getValue(BankBlock.OCCUPIED) != lit) {
+            world.setBlockAndUpdate(pos, state.setValue(BankBlock.OCCUPIED, lit));
         }
     }
 }

@@ -2,9 +2,9 @@ package info.mudbourn.mmseconomy.history;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 
 // One ledger row: when it happened, what moved, the money split, and the other party.
 public record HistoryEntry(long day, HistoryCategory category, String item, int count,
@@ -22,27 +22,27 @@ public record HistoryEntry(long day, HistoryCategory category, String item, int 
         Codec.STRING.fieldOf("counterparty").forGetter(HistoryEntry::counterparty)
     ).apply(instance, HistoryEntry::new));
 
-    public static final PacketCodec<RegistryByteBuf, HistoryEntry> PACKET_CODEC = PacketCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, HistoryEntry> PACKET_CODEC = StreamCodec.ofMember(
         (value, buf) -> {
             buf.writeVarLong(value.day);
             buf.writeVarInt(value.category.ordinal());
-            buf.writeString(value.item);
+            buf.writeUtf(value.item);
             buf.writeVarInt(value.count);
             buf.writeVarLong(value.gross);
             buf.writeVarLong(value.tax);
             buf.writeVarLong(value.net);
-            buf.writeString(value.counterparty);
+            buf.writeUtf(value.counterparty);
         },
         buf -> new HistoryEntry(
             buf.readVarLong(),
             HistoryCategory.values()[buf.readVarInt()],
-            buf.readString(),
+            buf.readUtf(),
             buf.readVarInt(),
             buf.readVarLong(),
             buf.readVarLong(),
             buf.readVarLong(),
-            buf.readString()));
+            buf.readUtf()));
 
-    public static final PacketCodec<RegistryByteBuf, java.util.List<HistoryEntry>> LIST_CODEC =
-        PACKET_CODEC.collect(PacketCodecs.toList());
+    public static final StreamCodec<RegistryFriendlyByteBuf, java.util.List<HistoryEntry>> LIST_CODEC =
+        PACKET_CODEC.apply(ByteBufCodecs.list());
 }

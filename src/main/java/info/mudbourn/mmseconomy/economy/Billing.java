@@ -4,12 +4,11 @@ import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -27,7 +26,7 @@ public final class Billing {
     }
 
     public static long today(MinecraftServer server) {
-        return server.getOverworld().getTimeOfDay() / 24000L;
+        return server.overworld().getOverworldClockTime() / 24000L;
     }
 
     // Floored basis-point share of an amount.
@@ -52,15 +51,15 @@ public final class Billing {
 
     // Runs once per new in-game day: late growth, due bills and bonds, then debt collection.
     public static void tick(MinecraftServer server) {
-        ServerWorld overworld = server.getOverworld();
+        ServerLevel overworld = server.overworld();
         if (overworld == null) {
             return;
         }
-        long day = overworld.getTimeOfDay() / 24000L;
+        long day = overworld.getOverworldClockTime() / 24000L;
         Obligations state = Obligations.get(server);
         if (state.lastDay < 0L) {
             state.lastDay = day;
-            state.markDirty();
+            state.setDirty();
             return;
         }
         if (day <= state.lastDay) {
@@ -85,13 +84,13 @@ public final class Billing {
             collect(server, state, debt);
         }
         Bonds.payVaults(server, state);
-        state.markDirty();
+        state.setDirty();
     }
 
     // Collects what a joining player owes and reminds them of the rest.
-    public static void onJoin(ServerPlayNetworkHandler handler, PacketSender sender, MinecraftServer server) {
-        ServerPlayerEntity player = handler.player;
-        String id = player.getUuid().toString();
+    public static void onJoin(ServerGamePacketListenerImpl handler, PacketSender sender, MinecraftServer server) {
+        ServerPlayer player = handler.player;
+        String id = player.getUUID().toString();
         Obligations state = Obligations.get(server);
         for (Debt debt : new ArrayList<>(state.debts)) {
             if (debt.payer.equals(id)) {
@@ -99,12 +98,12 @@ public final class Billing {
             }
         }
         Bonds.payVaults(server, state);
-        state.markDirty();
+        state.setDirty();
 
         long owed = owedBy(state, id);
         if (owed > 0) {
-            player.sendMessage(Text.literal("You owe " + Currency.format(owed)
-                + " in overdue bills, bonds and loans."), false);
+            player.sendSystemMessage(Component.literal("You owe " + Currency.format(owed)
+                + " in overdue bills, bonds and loans."));
         }
     }
 
@@ -116,12 +115,12 @@ public final class Billing {
     }
 
     // Records a new bill whose first charge is due one interval from today.
-    public static Bill create(MinecraftServer server, ServerPlayerEntity payer, UUID payeeId,
+    public static Bill create(MinecraftServer server, ServerPlayer payer, UUID payeeId,
                               String payeeName, long amount, int intervalDays, int lateBps, String label) {
         Obligations state = Obligations.get(server);
         Bill bill = new Bill(
             state.allocateId(),
-            payer.getUuid().toString(),
+            payer.getUUID().toString(),
             payer.getName().getString(),
             payeeId.toString(),
             payeeName,
@@ -131,12 +130,12 @@ public final class Billing {
             label,
             today(server) + intervalDays);
         state.bills.add(bill);
-        state.markDirty();
+        state.setDirty();
         return bill;
     }
 
     // Pays up to amount from an online payer to a payee, taxed as a bill; returns the gross actually paid.
-    public static long pay(MinecraftServer server, ServerPlayerEntity payer, String payeeId,
+    public static long pay(MinecraftServer server, ServerPlayer payer, String payeeId,
                            String payeeName, long amount, String label) {
         long gross = Math.min(amount, Wallet.balance(payer));
         if (gross <= 0) {
@@ -144,7 +143,7 @@ public final class Billing {
         }
 
         UUID payee = UUID.fromString(payeeId);
-        ServerPlayerEntity online = server.getPlayerManager().getPlayer(payee);
+        ServerPlayer online = server.getPlayerList().getPlayer(payee);
         Tax.Settlement settlement = online != null
             ? Tax.settleTaxed(payer, online, gross, TaxKind.BILL)
             : Tax.settleTaxedOffline(payer, gross, TaxKind.BILL);
@@ -158,14 +157,14 @@ public final class Billing {
             settlement.gross(), settlement.tax(), -settlement.gross(), payeeName + " (" + label + ")"));
         HistoryEntry received = new HistoryEntry(day, HistoryCategory.BILL, "", 0,
             settlement.gross(), settlement.tax(), settlement.net(), payerName + " (" + label + ")");
-        payer.sendMessage(Text.literal("Bill " + label + ": paid " + payeeName + " "
-            + Currency.format(settlement.gross()) + " (tax " + Currency.format(settlement.tax()) + ")."), false);
+        payer.sendSystemMessage(Component.literal("Bill " + label + ": paid " + payeeName + " "
+            + Currency.format(settlement.gross()) + " (tax " + Currency.format(settlement.tax()) + ")."));
 
         if (online != null) {
             History.log(online, received);
-            online.sendMessage(Text.literal("Bill " + label + ": received "
+            online.sendSystemMessage(Component.literal("Bill " + label + ": received "
                 + Currency.format(settlement.net()) + " from " + payerName
-                + " (tax " + Currency.format(settlement.tax()) + ")."), false);
+                + " (tax " + Currency.format(settlement.tax()) + ")."));
         } else {
             PendingPayouts.get(server).record(payee, settlement.net(), received);
         }
@@ -176,9 +175,9 @@ public final class Billing {
         if (uuid.isEmpty()) {
             return;
         }
-        ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(uuid));
+        ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(uuid));
         if (player != null) {
-            player.sendMessage(Text.literal(message), false);
+            player.sendSystemMessage(Component.literal(message));
         }
     }
 
@@ -189,7 +188,7 @@ public final class Billing {
         Debt debt = new Debt(state.allocateId(), payerId, payerName, payeeId, payeeName, ref,
             bond, principalPart, amount, -1L, lateBps, label, loan, 0L);
         state.debts.add(debt);
-        state.markDirty();
+        state.setDirty();
         return debt;
     }
 
@@ -207,7 +206,7 @@ public final class Billing {
     }
 
     private static void charge(MinecraftServer server, Obligations state, Bill bill, long due) {
-        ServerPlayerEntity payer = server.getPlayerManager().getPlayer(UUID.fromString(bill.payer));
+        ServerPlayer payer = server.getPlayerList().getPlayer(UUID.fromString(bill.payer));
         long paid = payer == null ? 0L : pay(server, payer, bill.payee, bill.payeeName, due, bill.label);
         long shortfall = due - paid;
         if (shortfall <= 0) {
@@ -229,7 +228,7 @@ public final class Billing {
         } else if (debt.loan) {
             paid = Loans.collect(server, debt);
         } else {
-            ServerPlayerEntity payer = server.getPlayerManager().getPlayer(UUID.fromString(debt.payer));
+            ServerPlayer payer = server.getPlayerList().getPlayer(UUID.fromString(debt.payer));
             paid = payer == null ? 0L : pay(server, payer, debt.payee, debt.payeeName, debt.amount, debt.label);
         }
         if (paid <= 0) {
@@ -240,6 +239,6 @@ public final class Billing {
         if (debt.amount <= 0) {
             state.debts.remove(debt);
         }
-        state.markDirty();
+        state.setDirty();
     }
 }

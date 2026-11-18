@@ -3,8 +3,8 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.component.ModComponents;
 import info.mudbourn.mmseconomy.component.WalletComponent;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 
 // Central server-authoritative access to player wallet balances, all amounts in Pice.
 public final class Wallet {
@@ -12,20 +12,20 @@ public final class Wallet {
     private Wallet() {
     }
 
-    public static WalletComponent get(PlayerEntity player) {
+    public static WalletComponent get(Player player) {
         return ModComponents.WALLET.get(player);
     }
 
-    public static long balance(PlayerEntity player) {
+    public static long balance(Player player) {
         return get(player).getBalance();
     }
 
-    public static boolean canAfford(PlayerEntity player, long pice) {
+    public static boolean canAfford(Player player, long pice) {
         return pice >= 0 && balance(player) >= pice;
     }
 
     // Adds pice to the wallet, clamped to the configured cap, then syncs the owner.
-    public static void deposit(ServerPlayerEntity player, long pice) {
+    public static void deposit(ServerPlayer player, long pice) {
         if (pice <= 0) {
             return;
         }
@@ -36,7 +36,7 @@ public final class Wallet {
     }
 
     // Removes pice if affordable, returning false and leaving the balance untouched otherwise.
-    public static boolean withdraw(ServerPlayerEntity player, long pice) {
+    public static boolean withdraw(ServerPlayer player, long pice) {
         if (pice <= 0) {
             return false;
         }
@@ -50,7 +50,7 @@ public final class Wallet {
     }
 
     // Moves pice from one wallet to another with no tax, rolling back on failure.
-    public static boolean transfer(ServerPlayerEntity from, ServerPlayerEntity to, long pice) {
+    public static boolean transfer(ServerPlayer from, ServerPlayer to, long pice) {
         if (pice <= 0 || !withdraw(from, pice)) {
             return false;
         }

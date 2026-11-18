@@ -1,37 +1,35 @@
 package info.mudbourn.mmseconomy.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.client.screen.HistoryScreen;
 import info.mudbourn.mmseconomy.client.screen.HubScreen;
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.util.Identifier;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
 
 public class MmsEconomyClient implements ClientModInitializer {
 
     // The hub keybind, also used by open screens to close themselves.
-    public static KeyBinding openHub;
+    public static KeyMapping openHub;
 
     @Override
     public void onInitializeClient() {
         WalletHud.register();
 
-        KeyBinding.Category category = KeyBinding.Category.create(
-            Identifier.of(MmsEconomy.MOD_ID, "economy"));
-        openHub = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        KeyMapping.Category category = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "economy"));
+        openHub = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.mms_economy.open_hub",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_SEMICOLON,
+            InputConstants.KEY_SEMICOLON,
             category));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (openHub.wasPressed()) {
+            while (openHub.consumeClick()) {
                 if (client.player != null) {
                     ClientPlayNetworking.send(new EconomyNetworking.RequestHub());
                 }
@@ -40,23 +38,23 @@ public class MmsEconomyClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(EconomyNetworking.OpenHub.ID, (payload, context) ->
             context.client().execute(() -> {
-                if (context.client().currentScreen instanceof HubScreen hub) {
+                if (context.client().gui.screen() instanceof HubScreen hub) {
                     hub.apply(payload);
                 } else {
-                    context.client().setScreen(new HubScreen(payload));
+                    context.client().gui.setScreen(new HubScreen(payload));
                 }
             }));
 
         ClientPlayNetworking.registerGlobalReceiver(EconomyNetworking.OpenHistory.ID, (payload, context) ->
             context.client().execute(() -> {
-                if (context.client().currentScreen instanceof HubScreen hub) {
+                if (context.client().gui.screen() instanceof HubScreen hub) {
                     hub.applyHistory(
                         payload.purchases(),
                         payload.payments(),
                         payload.deals(),
                         payload.bills());
                 } else {
-                    context.client().setScreen(new HistoryScreen(
+                    context.client().gui.setScreen(new HistoryScreen(
                         payload.purchases(),
                         payload.payments(),
                         payload.deals(),

@@ -2,40 +2,40 @@ package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.economy.Chips;
-import net.minecraft.item.ItemGroup;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.ItemStack;
 
 // A single creative tab that holds every mms-economy item and block.
 public final class ModItemGroups {
 
-    public static ItemGroup ECONOMY;
+    public static CreativeModeTab ECONOMY;
 
     public static void register() {
-        Identifier id = Identifier.of(MmsEconomy.MOD_ID, "economy");
-        RegistryKey<ItemGroup> key = RegistryKey.of(Registries.ITEM_GROUP.getKey(), id);
+        Identifier id = Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "economy");
+        ResourceKey<CreativeModeTab> key = ResourceKey.create(BuiltInRegistries.CREATIVE_MODE_TAB.key(), id);
 
-        ECONOMY = Registry.register(Registries.ITEM_GROUP, key, ItemGroup.create(ItemGroup.Row.TOP, 0)
-            .displayName(Text.translatable("itemGroup.mms_economy.economy"))
+        ECONOMY = Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, key, CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
+            .title(Component.translatable("itemGroup.mms_economy.economy"))
             .icon(() -> new ItemStack(ModItems.COLT))
-            .entries((context, entries) -> {
-                entries.add(ModItems.COLT);
-                entries.add(ModItems.PICE);
-                entries.add(ModBlocks.COLT_BLOCK);
-                entries.add(ModBlocks.PICE_BLOCK);
-                entries.add(ModBlocks.BANK);
-                entries.add(ModItems.SHOP_BOOK);
-                entries.add(ModItems.BOND);
-                entries.add(ModItems.LOAN_DEED);
+            .displayItems((context, entries) -> {
+                entries.accept(ModItems.COLT);
+                entries.accept(ModItems.PICE);
+                entries.accept(ModBlocks.COLT_BLOCK);
+                entries.accept(ModBlocks.PICE_BLOCK);
+                entries.accept(ModBlocks.BANK);
+                entries.accept(ModItems.SHOP_BOOK);
+                entries.accept(ModItems.BOND);
+                entries.accept(ModItems.LOAN_DEED);
                 if (Chips.casinoLoaded()) {
-                    entries.add(ModItems.CHIP_10);
-                    entries.add(ModItems.CHIP_20);
-                    entries.add(ModItems.CHIP_50);
-                    entries.add(ModItems.CHIP_100);
+                    entries.accept(ModItems.CHIP_10);
+                    entries.accept(ModItems.CHIP_20);
+                    entries.accept(ModItems.CHIP_50);
+                    entries.accept(ModItems.CHIP_100);
                 }
             })
             .build());

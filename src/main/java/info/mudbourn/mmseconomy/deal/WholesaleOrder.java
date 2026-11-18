@@ -2,23 +2,22 @@ package info.mudbourn.mmseconomy.deal;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Uuids;
-
 import java.util.UUID;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.world.item.ItemStack;
 
 // A buyer's order against an offer, holding the escrowed payment and, once accepted, the goods still in transit.
 public final class WholesaleOrder {
 
     public static final Codec<WholesaleOrder> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.INT.fieldOf("id").forGetter(order -> order.id),
-        Uuids.CODEC.fieldOf("seller").forGetter(order -> order.seller),
+        UUIDUtil.AUTHLIB_CODEC.fieldOf("seller").forGetter(order -> order.seller),
         Codec.STRING.fieldOf("sellerName").forGetter(order -> order.sellerName),
         Spot.CODEC.fieldOf("sellerDepot").forGetter(order -> order.sellerDepot),
         ItemStack.CODEC.fieldOf("stack").forGetter(order -> order.stack),
         Codec.INT.fieldOf("lotSize").forGetter(order -> order.lotSize),
         Codec.LONG.fieldOf("lotPrice").forGetter(order -> order.lotPrice),
-        Uuids.CODEC.fieldOf("buyer").forGetter(order -> order.buyer),
+        UUIDUtil.AUTHLIB_CODEC.fieldOf("buyer").forGetter(order -> order.buyer),
         Codec.STRING.fieldOf("buyerName").forGetter(order -> order.buyerName),
         Spot.CODEC.fieldOf("buyerDepot").forGetter(order -> order.buyerDepot),
         Codec.INT.fieldOf("lots").forGetter(order -> order.lots),

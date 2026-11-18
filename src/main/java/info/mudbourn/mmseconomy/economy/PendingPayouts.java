@@ -3,11 +3,11 @@ package info.mudbourn.mmseconomy.economy;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 
 // Shop proceeds and their history rows owed to players who were offline when their listings sold, delivered on next join.
-public final class PendingPayouts extends PersistentState {
+public final class PendingPayouts extends SavedData {
 
     public static final Codec<PendingPayouts> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.unboundedMap(Codec.STRING, Codec.LONG).fieldOf("owed").forGetter(state -> state.owed),
@@ -23,8 +23,8 @@ public final class PendingPayouts extends PersistentState {
             .fieldOf("history").forGetter(state -> state.history)
     ).apply(instance, PendingPayouts::new));
 
-    public static final PersistentStateType<PendingPayouts> TYPE = new PersistentStateType<>(
-        "mms_economy_pending_payouts",
+    public static final SavedDataType<PendingPayouts> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_pending_payouts"),
         PendingPayouts::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -45,7 +45,7 @@ public final class PendingPayouts extends PersistentState {
     }
 
     public static PendingPayouts get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // Records a sale for an offline owner: the net owed plus their ledger row for it.
@@ -54,7 +54,7 @@ public final class PendingPayouts extends PersistentState {
             owed.merge(owner.toString(), net, Long::sum);
         }
         history.computeIfAbsent(owner.toString(), key -> new ArrayList<>()).add(entry);
-        markDirty();
+        setDirty();
     }
 
     // Removes and returns everything owed to the owner, or zero when nothing is owed.
@@ -63,7 +63,7 @@ public final class PendingPayouts extends PersistentState {
         if (amount == null || amount <= 0) {
             return 0L;
         }
-        markDirty();
+        setDirty();
         return amount;
     }
 
@@ -73,7 +73,7 @@ public final class PendingPayouts extends PersistentState {
         if (entries == null || entries.isEmpty()) {
             return List.of();
         }
-        markDirty();
+        setDirty();
         return entries;
     }
 }

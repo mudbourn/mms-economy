@@ -2,7 +2,7 @@ package info.mudbourn.mmseconomy.deal;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 // A depot anchor together with the dimension it stands in.
 public record Spot(BlockPos pos, String dimension) {

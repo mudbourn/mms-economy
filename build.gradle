@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.17.20'
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
     id 'maven-publish'
 }
 
@@ -21,29 +21,29 @@ loom {
     }
 }
 
-repositories {
-    maven {
-        name = 'Ladysnake'
-        url = 'https://maven.ladysnake.org/releases'
-    }
-    maven {
-        name = 'Modrinth'
-        url = 'https://api.modrinth.com/maven'
-        content {
-            includeGroup 'maven.modrinth'
-        }
+configurations {
+    runtimeMods {
+        transitive = false
     }
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    // Cardinal Components modules extracted from the nested jars, compile only.
+    compileOnly files(
+        "libs/26.3/cardinal-components-base-${project.cardinal_version}.jar",
+        "libs/26.3/cardinal-components-entity-${project.cardinal_version}.jar"
+    )
 
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:${project.cardinal_version}"
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:${project.cardinal_version}"
+    // Dev runtime: Cardinal Components, the soft-suggested Rubies mod and the uproot shim that lets it load.
+    runtimeMods files(
+        "libs/26.3/cardinal-components-api-${project.cardinal_version}.jar",
+        "libs/26.3/rubies-1.0.0+1.21.11.jar",
+        "libs/26.3/mms-uproot-0.1.0.jar"
+    )
 }
 
 processResources {
@@ -55,22 +55,35 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
+    it.options.release = 25
 }
 
 java {
     withSourcesJar()
 
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// Copies the runtime mods into the dev run's mods folder.
+tasks.register("syncRuntimeMods") {
+    inputs.files(configurations.runtimeMods)
+    doLast {
+        copy {
+            from configurations.runtimeMods
+            into file("run/mods")
+        }
+    }
+}
+
+["runClient", "runServer"].each { runName ->
+    tasks.named(runName) {
+        dependsOn "syncRuntimeMods"
     }
 }

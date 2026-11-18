@@ -3,8 +3,7 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.config.EconomyConfig;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.math.BigInteger;
 
 // The single money-movement path for taxed transfers, so the rule cannot drift.
@@ -39,7 +38,7 @@ public final class Tax {
     }
 
     // Debits from by amount, credits the treasury the tax, credits to the net, or returns null when unaffordable.
-    public static Settlement settleTaxed(ServerPlayerEntity from, ServerPlayerEntity to,
+    public static Settlement settleTaxed(ServerPlayer from, ServerPlayer to,
                                          long amount, TaxKind kind) {
         if (amount <= 0 || !Wallet.canAfford(from, amount)) {
             return null;
@@ -51,7 +50,7 @@ public final class Tax {
             return null;
         }
 
-        MinecraftServer server = from.getEntityWorld().getServer();
+        MinecraftServer server = from.level().getServer();
         if (server != null && tax > 0) {
             Treasury.get(server).credit(tax);
         }
@@ -61,7 +60,7 @@ public final class Tax {
     }
 
     // Debits the buyer and credits the treasury the tax, leaving the net for the caller to escrow for an offline owner.
-    public static Settlement settleTaxedOffline(ServerPlayerEntity from, long amount, TaxKind kind) {
+    public static Settlement settleTaxedOffline(ServerPlayer from, long amount, TaxKind kind) {
         if (amount <= 0 || !Wallet.canAfford(from, amount)) {
             return null;
         }
@@ -72,7 +71,7 @@ public final class Tax {
             return null;
         }
 
-        MinecraftServer server = from.getEntityWorld().getServer();
+        MinecraftServer server = from.level().getServer();
         if (server != null && tax > 0) {
             Treasury.get(server).credit(tax);
         }

@@ -5,11 +5,10 @@ import info.mudbourn.mmseconomy.config.EconomyConfig;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
-import net.minecraft.item.ItemStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -42,14 +41,14 @@ public final class Loans {
     }
 
     // Records a new loan whose first period starts now; an empty lender id means the bank.
-    public static Loan open(MinecraftServer server, ServerPlayerEntity borrower, String lenderId,
+    public static Loan open(MinecraftServer server, ServerPlayer borrower, String lenderId,
                             String lenderName, long principal, int rateBps, int periodDays,
                             int installments, int lateBps) {
         Obligations state = Obligations.get(server);
         int period = normalizeDays(periodDays);
         Loan loan = new Loan(
             state.allocateId(),
-            borrower.getUuid().toString(),
+            borrower.getUUID().toString(),
             borrower.getName().getString(),
             lenderId,
             lenderName,
@@ -60,45 +59,45 @@ public final class Loans {
             lateBps,
             principal,
             installments,
-            PlayTime.get(server).ticks(borrower.getUuid().toString()));
+            PlayTime.get(server).ticks(borrower.getUUID().toString()));
         state.loans.add(loan);
-        state.markDirty();
+        state.setDirty();
         return loan;
     }
 
     // Lends Treasury money to a player standing at a bank, on the configured bank terms.
-    public static void borrowFromBank(ServerPlayerEntity player, long amount, int installments) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void borrowFromBank(ServerPlayer player, long amount, int installments) {
+        MinecraftServer server = player.level().getServer();
         EconomyConfig config = MmsEconomy.config();
         if (server == null || !config.bankLoansEnabled) {
-            player.sendMessage(Text.literal("The bank is not lending."), false);
+            player.sendSystemMessage(Component.literal("The bank is not lending."));
             return;
         }
         if (!BankAccess.inReach(player)) {
-            player.sendMessage(Text.literal("Stand at a bank to borrow from it."), false);
+            player.sendSystemMessage(Component.literal("Stand at a bank to borrow from it."));
             return;
         }
         int maxInstallments = Math.max(1, Math.min(config.bankLoanMaxInstallments, MAX_INSTALLMENTS));
         if (installments < 1 || installments > maxInstallments) {
-            player.sendMessage(Text.literal("The bank lends over 1 to " + maxInstallments
-                + " installments."), false);
+            player.sendSystemMessage(Component.literal("The bank lends over 1 to " + maxInstallments
+                + " installments."));
             return;
         }
 
         Obligations state = Obligations.get(server);
-        String id = player.getUuid().toString();
+        String id = player.getUUID().toString();
         if (Billing.owedBy(state, id) > 0) {
-            player.sendMessage(Text.literal("Clear your overdue debts before borrowing from the bank."), false);
+            player.sendSystemMessage(Component.literal("Clear your overdue debts before borrowing from the bank."));
             return;
         }
         long room = Math.max(0L, bankLimit(player) - bankPrincipal(state, id));
         if (amount > room) {
-            player.sendMessage(Text.literal("The bank will lend you at most " + Currency.format(room)
-                + " more." + (goodStanding(player) ? "" : " " + standingRule())), false);
+            player.sendSystemMessage(Component.literal("The bank will lend you at most " + Currency.format(room)
+                + " more." + (goodStanding(player) ? "" : " " + standingRule())));
             return;
         }
         if (!Treasury.get(server).debit(amount)) {
-            player.sendMessage(Text.literal("The bank cannot cover that loan right now."), false);
+            player.sendSystemMessage(Component.literal("The bank cannot cover that loan right now."));
             return;
         }
 
@@ -107,13 +106,13 @@ public final class Loans {
             config.bankLoanPeriodDays, installments, config.bankLoanLateBps);
         History.log(player, new HistoryEntry(History.currentDay(player), HistoryCategory.DEAL, "", 0,
             amount, 0L, amount, BANK_LOAN));
-        player.sendMessage(Text.literal("Borrowed " + Currency.format(amount) + " from the bank: "
-            + terms(loan) + "."), false);
+        player.sendSystemMessage(Component.literal("Borrowed " + Currency.format(amount) + " from the bank: "
+            + terms(loan) + "."));
     }
 
     // Every ten seconds, charges online borrowers whose active playtime filled a period and grows their loan debts.
     public static void tick(MinecraftServer server) {
-        if (server.getTicks() % CHECK_INTERVAL != 0 || server.getOverworld() == null) {
+        if (server.getTickCount() % CHECK_INTERVAL != 0 || server.overworld() == null) {
             return;
         }
 
@@ -139,14 +138,14 @@ public final class Loans {
             while (ticks - debt.snapshot >= DAY_TICKS) {
                 Billing.grow(debt);
                 debt.snapshot += DAY_TICKS;
-                state.markDirty();
+                state.setDirty();
             }
         }
     }
 
     // Draws on a loan debt's payer, untaxed up to its principal, and returns what was collected.
     public static long collect(MinecraftServer server, Debt debt) {
-        ServerPlayerEntity payer = online(server, debt.payer);
+        ServerPlayer payer = online(server, debt.payer);
         if (payer == null) {
             return 0L;
         }
@@ -157,8 +156,8 @@ public final class Loans {
         long paid = principal
             + pay(server, payer, debt.payee, debt.payeeName, want - principal, true, debt.label);
         if (paid > 0) {
-            payer.sendMessage(Text.literal("Collected " + Currency.format(paid) + " of overdue "
-                + debt.label + "."), false);
+            payer.sendSystemMessage(Component.literal("Collected " + Currency.format(paid) + " of overdue "
+                + debt.label + "."));
             Billing.tell(server, debt.payee, debt.payerName + " paid " + Currency.format(paid)
                 + " of overdue " + debt.label + ".");
         }
@@ -166,21 +165,21 @@ public final class Loans {
     }
 
     // Settles a loan early for its remaining principal plus one period of interest.
-    public static void repay(ServerPlayerEntity player, int id) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void repay(ServerPlayer player, int id) {
+        MinecraftServer server = player.level().getServer();
         if (server == null) {
             return;
         }
         Obligations state = Obligations.get(server);
         Loan loan = state.loan(id);
-        if (loan == null || !loan.borrower.equals(player.getUuid().toString())) {
-            player.sendMessage(Text.literal("You have no loan " + id + " to pay off."), false);
+        if (loan == null || !loan.borrower.equals(player.getUUID().toString())) {
+            player.sendSystemMessage(Component.literal("You have no loan " + id + " to pay off."));
             return;
         }
         long due = loan.payoff();
         if (!Wallet.canAfford(player, due)) {
-            player.sendMessage(Text.literal("Paying off " + label(loan) + " costs " + Currency.format(due)
-                + "; you only have " + Currency.format(Wallet.balance(player)) + "."), false);
+            player.sendSystemMessage(Component.literal("Paying off " + label(loan) + " costs " + Currency.format(due)
+                + "; you only have " + Currency.format(Wallet.balance(player)) + "."));
             return;
         }
 
@@ -190,8 +189,8 @@ public final class Loans {
         loan.principalLeft = 0L;
         loan.paymentsLeft = 0;
         state.loans.remove(loan);
-        state.markDirty();
-        player.sendMessage(Text.literal("Paid off " + label + " for " + Currency.format(due) + "."), false);
+        state.setDirty();
+        player.sendSystemMessage(Component.literal("Paid off " + label + " for " + Currency.format(due) + "."));
         Billing.tell(server, loan.lender, loan.borrowerName + " paid off " + label + " early for "
             + Currency.format(due) + ".");
     }
@@ -220,23 +219,23 @@ public final class Loans {
     }
 
     // Tells the holder of a loan deed where its loan stands.
-    public static void inspect(ServerPlayerEntity player, ItemStack stack) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void inspect(ServerPlayer player, ItemStack stack) {
+        MinecraftServer server = player.level().getServer();
         int id = LoanDeed.read(stack);
         if (server == null || id < 0) {
-            player.sendMessage(Text.literal("This deed is blank; lend with /loan accept."), false);
+            player.sendSystemMessage(Component.literal("This deed is blank; lend with /loan accept."));
             return;
         }
         Loan loan = Obligations.get(server).loan(id);
         if (loan == null) {
-            player.sendMessage(Text.literal("This loan is settled and the deed is void."), false);
+            player.sendSystemMessage(Component.literal("This loan is settled and the deed is void."));
             return;
         }
-        player.sendMessage(Text.literal(describe(server, loan, player.getUuid().toString()) + "."), false);
+        player.sendSystemMessage(Component.literal(describe(server, loan, player.getUUID().toString()) + "."));
     }
 
     // The most bank loan principal the player may owe at once.
-    public static long bankLimit(ServerPlayerEntity player) {
+    public static long bankLimit(ServerPlayer player) {
         EconomyConfig config = MmsEconomy.config();
         return goodStanding(player)
             ? Math.max(config.bankLoanMaxPice, config.bankLoanBasicMaxPice)
@@ -244,7 +243,7 @@ public final class Loans {
     }
 
     // Whether the player's balance and transaction history earn the full bank loan limit.
-    public static boolean goodStanding(ServerPlayerEntity player) {
+    public static boolean goodStanding(ServerPlayer player) {
         EconomyConfig config = MmsEconomy.config();
         if (Wallet.balance(player) < config.bankLoanStandingBalancePice) {
             return false;
@@ -261,7 +260,7 @@ public final class Loans {
     }
 
     // The bank's lending terms for the player in words, or an empty string when it is not lending.
-    public static String bankTerms(ServerPlayerEntity player) {
+    public static String bankTerms(ServerPlayer player) {
         EconomyConfig config = MmsEconomy.config();
         if (!config.bankLoansEnabled) {
             return "";
@@ -305,14 +304,14 @@ public final class Loans {
     }
 
     private static void charge(MinecraftServer server, Obligations state, Loan loan) {
-        ServerPlayerEntity borrower = online(server, loan.borrower);
+        ServerPlayer borrower = online(server, loan.borrower);
         long principal = loan.principalDue();
         long paid = settle(server, state, loan, borrower, loan.interest(), false)
             + settle(server, state, loan, borrower, principal, true);
         loan.principalLeft -= principal;
         loan.paymentsLeft--;
         loan.snapshot += loan.periodTicks();
-        state.markDirty();
+        state.setDirty();
 
         if (paid > 0) {
             String label = label(loan);
@@ -325,7 +324,7 @@ public final class Loans {
 
     // Pays one part of an installment and turns any shortfall into a debt; returns what was paid.
     private static long settle(MinecraftServer server, Obligations state, Loan loan,
-                               ServerPlayerEntity borrower, long amount, boolean principalPart) {
+                               ServerPlayer borrower, long amount, boolean principalPart) {
         if (amount <= 0) {
             return 0L;
         }
@@ -351,7 +350,7 @@ public final class Loans {
 
     private static void close(MinecraftServer server, Obligations state, Loan loan) {
         state.loans.remove(loan);
-        state.markDirty();
+        state.setDirty();
         String label = label(loan);
         Billing.tell(server, loan.borrower, label + " from " + loan.lenderName
             + " has run its term and is closed. Any missed payments stay owed as debts.");
@@ -360,7 +359,7 @@ public final class Loans {
     }
 
     // Moves up to amount from the payer to the lender or the Treasury, taxing it when asked; returns the gross paid.
-    private static long pay(MinecraftServer server, ServerPlayerEntity payer, String lenderId,
+    private static long pay(MinecraftServer server, ServerPlayer payer, String lenderId,
                             String lenderName, long amount, boolean taxed, String label) {
         long gross = Math.min(amount, Wallet.balance(payer));
         if (gross <= 0 || !Wallet.withdraw(payer, gross)) {
@@ -381,7 +380,7 @@ public final class Loans {
         UUID lender = UUID.fromString(lenderId);
         HistoryEntry received = new HistoryEntry(day, HistoryCategory.BILL, "", 0,
             gross, tax, net, payer.getName().getString() + " (" + label + ")");
-        ServerPlayerEntity online = server.getPlayerManager().getPlayer(lender);
+        ServerPlayer online = server.getPlayerList().getPlayer(lender);
         if (online != null) {
             Wallet.deposit(online, net);
             History.log(online, received);
@@ -391,7 +390,7 @@ public final class Loans {
         return gross;
     }
 
-    private static ServerPlayerEntity online(MinecraftServer server, String uuid) {
-        return server.getPlayerManager().getPlayer(UUID.fromString(uuid));
+    private static ServerPlayer online(MinecraftServer server, String uuid) {
+        return server.getPlayerList().getPlayer(UUID.fromString(uuid));
     }
 }

@@ -2,19 +2,18 @@ package info.mudbourn.mmseconomy.market;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.math.BlockPos;
-
 import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
 
 // One market listing: who sells, from which depot, what exact item, at what unit price.
 public record ShopListing(UUID owner, String ownerName, BlockPos depot, String dimension,
                           String item, long price, ItemStack stack) {
 
     public static final Codec<ShopListing> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        net.minecraft.util.Uuids.CODEC.fieldOf("owner").forGetter(ShopListing::owner),
+        net.minecraft.core.UUIDUtil.AUTHLIB_CODEC.fieldOf("owner").forGetter(ShopListing::owner),
         Codec.STRING.fieldOf("ownerName").forGetter(ShopListing::ownerName),
         BlockPos.CODEC.fieldOf("depot").forGetter(ShopListing::depot),
         Codec.STRING.fieldOf("dimension").forGetter(ShopListing::dimension),
@@ -28,7 +27,7 @@ public record ShopListing(UUID owner, String ownerName, BlockPos depot, String d
         if (!stack.isEmpty()) {
             return stack.copyWithCount(1);
         }
-        net.minecraft.item.Item bare = Marketplace.itemOf(item);
+        net.minecraft.world.item.Item bare = Marketplace.itemOf(item);
         return bare != null ? new ItemStack(bare) : ItemStack.EMPTY;
     }
 
@@ -38,16 +37,16 @@ public record ShopListing(UUID owner, String ownerName, BlockPos depot, String d
             return false;
         }
         if (!stack.isEmpty()) {
-            return ItemStack.areItemsAndComponentsEqual(withoutDisplay(stack), withoutDisplay(candidate));
+            return ItemStack.isSameItemSameComponents(withoutDisplay(stack), withoutDisplay(candidate));
         }
-        return Registries.ITEM.getId(candidate.getItem()).toString().equals(item);
+        return BuiltInRegistries.ITEM.getKey(candidate.getItem()).toString().equals(item);
     }
 
     // A copy of the stack without the item name and lore a mod may rebuild between versions.
     private static ItemStack withoutDisplay(ItemStack source) {
         ItemStack copy = source.copy();
-        copy.remove(DataComponentTypes.ITEM_NAME);
-        copy.remove(DataComponentTypes.LORE);
+        copy.remove(DataComponents.ITEM_NAME);
+        copy.remove(DataComponents.LORE);
         return copy;
     }
 }

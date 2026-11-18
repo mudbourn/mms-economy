@@ -3,7 +3,7 @@ package info.mudbourn.mmseconomy.component;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.history.HistoryComponent;
 import info.mudbourn.mmseconomy.history.HistoryComponentImpl;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 import org.ladysnake.cca.api.v3.component.ComponentKey;
 import org.ladysnake.cca.api.v3.component.ComponentRegistryV3;
 import org.ladysnake.cca.api.v3.entity.EntityComponentFactoryRegistry;
@@ -14,11 +14,11 @@ import org.ladysnake.cca.api.v3.entity.RespawnCopyStrategy;
 public final class ModComponents implements EntityComponentInitializer {
 
     public static final ComponentKey<WalletComponent> WALLET = ComponentRegistryV3.INSTANCE.getOrCreate(
-        Identifier.of(MmsEconomy.MOD_ID, "wallet"),
+        Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "wallet"),
         WalletComponent.class);
 
     public static final ComponentKey<HistoryComponent> HISTORY = ComponentRegistryV3.INSTANCE.getOrCreate(
-        Identifier.of(MmsEconomy.MOD_ID, "history"),
+        Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "history"),
         HistoryComponent.class);
 
     @Override

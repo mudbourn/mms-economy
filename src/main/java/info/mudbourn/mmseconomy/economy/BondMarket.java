@@ -3,10 +3,9 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-
+import net.minecraft.server.level.ServerPlayer;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,7 +33,7 @@ public final class BondMarket {
             issuerName,
             lateBps);
         state.offerings.add(offering);
-        state.markDirty();
+        state.setDirty();
         return offering;
     }
 
@@ -46,7 +45,7 @@ public final class BondMarket {
             return false;
         }
         state.offerings.remove(offering);
-        state.markDirty();
+        state.setDirty();
         return true;
     }
 
@@ -60,20 +59,20 @@ public final class BondMarket {
     }
 
     // Sells one bond of an offering to the player for its principal, paid to the issuer.
-    public static void buy(ServerPlayerEntity player, int id) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void buy(ServerPlayer player, int id) {
+        MinecraftServer server = player.level().getServer();
         Obligations state = Obligations.get(server);
         BondOffering offering = state.offering(id);
         if (offering == null) {
-            player.sendMessage(Text.literal("No bond offering " + id + "."), false);
+            player.sendSystemMessage(Component.literal("No bond offering " + id + "."));
             return;
         }
-        if (offering.issuer.equals(player.getUuid().toString())) {
-            player.sendMessage(Text.literal("You cannot invest in your own bond."), false);
+        if (offering.issuer.equals(player.getUUID().toString())) {
+            player.sendSystemMessage(Component.literal("You cannot invest in your own bond."));
             return;
         }
         if (!Wallet.withdraw(player, offering.principal)) {
-            player.sendMessage(Text.literal("You only have " + Currency.format(Wallet.balance(player)) + "."), false);
+            player.sendSystemMessage(Component.literal("You only have " + Currency.format(Wallet.balance(player)) + "."));
             return;
         }
 
@@ -88,12 +87,12 @@ public final class BondMarket {
         if (offering.remaining <= 0) {
             state.offerings.remove(offering);
         }
-        state.markDirty();
+        state.setDirty();
 
         History.log(player, new HistoryEntry(day, HistoryCategory.DEAL, "", 0,
             offering.principal, 0L, -offering.principal, label));
-        player.sendMessage(Text.literal("Invested " + Currency.format(offering.principal) + " in a "
-            + label + "; it matures on day " + bond.maturityDay + "."), false);
+        player.sendSystemMessage(Component.literal("Invested " + Currency.format(offering.principal) + " in a "
+            + label + "; it matures on day " + bond.maturityDay + "."));
     }
 
     // Credits a sold bond's principal to the Treasury or the issuing player, escrowed when they are offline.
@@ -104,14 +103,14 @@ public final class BondMarket {
         }
 
         UUID issuer = UUID.fromString(offering.issuer);
-        ServerPlayerEntity online = server.getPlayerManager().getPlayer(issuer);
+        ServerPlayer online = server.getPlayerList().getPlayer(issuer);
         if (online == null) {
             PendingPayouts.get(server).record(issuer, offering.principal, received);
             return;
         }
         Wallet.deposit(online, offering.principal);
         History.log(online, received);
-        online.sendMessage(Text.literal(received.counterparty() + " for "
-            + Currency.format(offering.principal) + "."), false);
+        online.sendSystemMessage(Component.literal(received.counterparty() + " for "
+            + Currency.format(offering.principal) + "."));
     }
 }

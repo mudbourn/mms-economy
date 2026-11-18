@@ -15,17 +15,17 @@ import info.mudbourn.mmseconomy.market.Marketplace;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LecternBlock;
+import net.minecraft.world.level.block.entity.LecternBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.LecternBlock;
-import net.minecraft.block.entity.LecternBlockEntity;
 import info.mudbourn.mmseconomy.market.ShopBook;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,74 +67,74 @@ public class MmsEconomy implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(info.mudbourn.mmseconomy.deal.OfferManager::tickAll);
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-            BankOccupancy.release(handler.player.getEntityWorld(), handler.player));
+            BankOccupancy.release(handler.player.level(), handler.player));
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            ServerPlayerEntity player = handler.player;
+            ServerPlayer player = handler.player;
             info.mudbourn.mmseconomy.economy.PendingPayouts payouts =
                 info.mudbourn.mmseconomy.economy.PendingPayouts.get(server);
-            long owed = payouts.claim(player.getUuid());
-            for (info.mudbourn.mmseconomy.history.HistoryEntry entry : payouts.claimHistory(player.getUuid())) {
+            long owed = payouts.claim(player.getUUID());
+            for (info.mudbourn.mmseconomy.history.HistoryEntry entry : payouts.claimHistory(player.getUUID())) {
                 info.mudbourn.mmseconomy.history.History.log(player, entry);
             }
             if (owed <= 0) {
                 return;
             }
             info.mudbourn.mmseconomy.economy.Wallet.deposit(player, owed);
-            player.sendMessage(Text.literal("Shop sales while away: +"
-                + info.mudbourn.mmseconomy.economy.Currency.format(owed)), false);
+            player.sendSystemMessage(Component.literal("Shop sales while away: +"
+                + info.mudbourn.mmseconomy.economy.Currency.format(owed)));
         });
 
         ServerPlayConnectionEvents.JOIN.register(info.mudbourn.mmseconomy.economy.Billing::onJoin);
 
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
-            if (world instanceof ServerWorld serverWorld
-                && player instanceof ServerPlayerEntity serverPlayer
-                && serverWorld.getBlockState(hit.getBlockPos()).isOf(Blocks.BARREL)) {
+            if (world instanceof ServerLevel serverWorld
+                && player instanceof ServerPlayer serverPlayer
+                && serverWorld.getBlockState(hit.getBlockPos()).is(Blocks.BARREL)) {
                 String owner = Marketplace.protectedOwner(serverPlayer, hit.getBlockPos());
                 if (owner != null) {
-                    serverPlayer.sendMessage(Text.literal("This depot belongs to " + owner + "."), true);
-                    return ActionResult.FAIL;
+                    serverPlayer.sendOverlayMessage(Component.literal("This depot belongs to " + owner + "."));
+                    return InteractionResult.FAIL;
                 }
             }
-            return ActionResult.PASS;
+            return InteractionResult.PASS;
         });
 
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
-            if (!(world instanceof ServerWorld serverWorld)
-                || !(player instanceof ServerPlayerEntity serverPlayer)
-                || player.isSneaking()) {
-                return ActionResult.PASS;
+            if (!(world instanceof ServerLevel serverWorld)
+                || !(player instanceof ServerPlayer serverPlayer)
+                || player.isShiftKeyDown()) {
+                return InteractionResult.PASS;
             }
             BlockState state = serverWorld.getBlockState(hit.getBlockPos());
-            if (!state.isOf(Blocks.LECTERN)
-                || !state.get(LecternBlock.HAS_BOOK)
+            if (!state.is(Blocks.LECTERN)
+                || !state.getValue(LecternBlock.HAS_BOOK)
                 || !(serverWorld.getBlockEntity(hit.getBlockPos()) instanceof LecternBlockEntity lectern)) {
-                return ActionResult.PASS;
+                return InteractionResult.PASS;
             }
             ShopBook.Target target = ShopBook.read(lectern.getBook());
             if (target == null) {
-                return ActionResult.PASS;
+                return InteractionResult.PASS;
             }
             EconomyNetworking.openShop(serverPlayer, target);
-            return ActionResult.SUCCESS;
+            return InteractionResult.SUCCESS;
         });
 
         PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
-            if (!(world instanceof ServerWorld)
-                || !(player instanceof ServerPlayerEntity serverPlayer)
-                || !state.isOf(Blocks.BARREL)) {
+            if (!(world instanceof ServerLevel)
+                || !(player instanceof ServerPlayer serverPlayer)
+                || !state.is(Blocks.BARREL)) {
                 return true;
             }
             String owner = Marketplace.protectedOwner(serverPlayer, pos);
             if (owner != null) {
-                serverPlayer.sendMessage(Text.literal("This depot belongs to " + owner + "."), true);
+                serverPlayer.sendOverlayMessage(Component.literal("This depot belongs to " + owner + "."));
                 return false;
             }
             int closed = Marketplace.removeShopAtBrokenBarrel(serverPlayer, pos);
             if (closed > 0) {
-                serverPlayer.sendMessage(Text.literal("Breaking your depot closed "
-                    + closed + (closed == 1 ? " listing." : " listings.")), false);
+                serverPlayer.sendSystemMessage(Component.literal("Breaking your depot closed "
+                    + closed + (closed == 1 ? " listing." : " listings.")));
             }
             return true;
         });

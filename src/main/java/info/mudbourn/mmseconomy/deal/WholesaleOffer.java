@@ -2,10 +2,9 @@ package info.mudbourn.mmseconomy.deal;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Uuids;
-
 import java.util.UUID;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.world.item.ItemStack;
 
 // A seller's standing wholesale offer: an exact item sold in lots of a fixed size at a fixed price per lot.
 public record WholesaleOffer(int id, UUID seller, String sellerName, Spot depot,
@@ -13,7 +12,7 @@ public record WholesaleOffer(int id, UUID seller, String sellerName, Spot depot,
 
     public static final Codec<WholesaleOffer> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.INT.fieldOf("id").forGetter(WholesaleOffer::id),
-        Uuids.CODEC.fieldOf("seller").forGetter(WholesaleOffer::seller),
+        UUIDUtil.AUTHLIB_CODEC.fieldOf("seller").forGetter(WholesaleOffer::seller),
         Codec.STRING.fieldOf("sellerName").forGetter(WholesaleOffer::sellerName),
         Spot.CODEC.fieldOf("depot").forGetter(WholesaleOffer::depot),
         ItemStack.CODEC.fieldOf("stack").forGetter(WholesaleOffer::stack),

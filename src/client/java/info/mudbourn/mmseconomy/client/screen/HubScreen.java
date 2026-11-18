@@ -25,17 +25,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
 import info.mudbourn.mmseconomy.client.MmsEconomyClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
 
 // The economy hub: a tab row over a balance header, opened by /eco or a bank block.
 public final class HubScreen extends Screen {
@@ -131,11 +131,11 @@ public final class HubScreen extends Screen {
 
     private boolean historyLoaded;
 
-    private TextFieldWidget bankField;
+    private EditBox bankField;
 
-    private TextFieldWidget priceField;
+    private EditBox priceField;
 
-    private TextFieldWidget nameField;
+    private EditBox nameField;
 
     // The Deals-tab field contents, kept across redraws.
     private String dealLotSize = "";
@@ -168,7 +168,7 @@ public final class HubScreen extends Screen {
     private OpenHub shopGroupsSource;
 
     public HubScreen(OpenHub data) {
-        super(Text.literal("Economy"));
+        super(Component.literal("Economy"));
         this.data = data;
         this.tab = defaultTab();
         focus();
@@ -185,7 +185,7 @@ public final class HubScreen extends Screen {
             this.tab = defaultTab();
             this.scroll = 0;
         }
-        clearAndInit();
+        rebuildWidgets();
     }
 
     // Jumps the market to the owner and depot a shop lectern named, when the snapshot carries one.
@@ -238,7 +238,7 @@ public final class HubScreen extends Screen {
         this.historyDeals = deals;
         this.historyLoaded = true;
         if (tab == Tab.HISTORY) {
-            clearAndInit();
+            rebuildWidgets();
         }
     }
 
@@ -268,8 +268,8 @@ public final class HubScreen extends Screen {
             addTab(tabLabel(candidate), candidate, startX + i * (tabWidth + gap), tabWidth);
         }
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
-            .dimensions(this.width / 2 - 100, this.height - 28, 200, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
+            .bounds(this.width / 2 - 100, this.height - 28, 200, 20).build());
 
         switch (tab) {
             case BANK -> initBank();
@@ -299,51 +299,51 @@ public final class HubScreen extends Screen {
     }
 
     private void addHistoryTab(String label, HistoryCategory target, int x, int width) {
-        ButtonWidget button = ButtonWidget.builder(Text.literal(label), b -> {
+        Button button = Button.builder(Component.literal(label), b -> {
             this.historyTab = target;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(x, 74, width, 20).build();
+            rebuildWidgets();
+        }).bounds(x, 74, width, 20).build();
         button.active = target != historyTab;
-        addDrawableChild(button);
+        addRenderableWidget(button);
     }
 
     private void addTab(String label, Tab target, int x, int width) {
-        ButtonWidget button = ButtonWidget.builder(Text.literal(label), b -> {
+        Button button = Button.builder(Component.literal(label), b -> {
             this.tab = target;
             this.scroll = 0;
             this.selectedShop = null;
             this.selectedDepot = null;
             this.selectedMyDepot = null;
             this.shopView = ShopView.MANAGE;
-            clearAndInit();
-        }).dimensions(x, 28, width, 20).build();
+            rebuildWidgets();
+        }).bounds(x, 28, width, 20).build();
         button.active = target != tab;
-        addDrawableChild(button);
+        addRenderableWidget(button);
     }
 
     private void initBank() {
         int centerX = this.width / 2;
-        bankField = new TextFieldWidget(this.textRenderer, centerX - 80, 96, 160, 20, Text.literal("Amount"));
-        bankField.setPlaceholder(Text.literal("12.34"));
-        addDrawableChild(bankField);
+        bankField = new EditBox(this.font, centerX - 80, 96, 160, 20, Component.literal("Amount"));
+        bankField.setHint(Component.literal("12.34"));
+        addRenderableWidget(bankField);
         setInitialFocus(bankField);
 
         boolean usable = data.hasBank() && !data.bankOccupiedByOther();
-        ButtonWidget deposit = ButtonWidget.builder(Text.literal("Deposit"), b -> sendBank(true, false))
-            .dimensions(centerX - 80, 122, 78, 20).build();
-        ButtonWidget withdraw = ButtonWidget.builder(Text.literal("Withdraw"), b -> sendBank(false, false))
-            .dimensions(centerX + 2, 122, 78, 20).build();
+        Button deposit = Button.builder(Component.literal("Deposit"), b -> sendBank(true, false))
+            .bounds(centerX - 80, 122, 78, 20).build();
+        Button withdraw = Button.builder(Component.literal("Withdraw"), b -> sendBank(false, false))
+            .bounds(centerX + 2, 122, 78, 20).build();
         deposit.active = usable;
         withdraw.active = usable;
-        addDrawableChild(deposit);
-        addDrawableChild(withdraw);
+        addRenderableWidget(deposit);
+        addRenderableWidget(withdraw);
 
         if (Chips.casinoLoaded() && data.admin()) {
-            ButtonWidget cashChips = ButtonWidget.builder(Text.literal("Cash chips"), b -> sendBank(true, true))
-                .dimensions(centerX - 80, 146, 160, 20).build();
+            Button cashChips = Button.builder(Component.literal("Cash chips"), b -> sendBank(true, true))
+                .bounds(centerX - 80, 146, 160, 20).build();
             cashChips.active = usable;
-            addDrawableChild(cashChips);
+            addRenderableWidget(cashChips);
         }
     }
 
@@ -431,12 +431,12 @@ public final class HubScreen extends Screen {
 
     // Squared distance from the player to a depot centre, or 0 when the player is unavailable.
     private double distanceTo(BlockPos depot) {
-        if (this.client == null || this.client.player == null) {
+        if (this.minecraft == null || this.minecraft.player == null) {
             return 0.0;
         }
-        double dx = this.client.player.getX() - (depot.getX() + 0.5);
-        double dy = this.client.player.getY() - (depot.getY() + 0.5);
-        double dz = this.client.player.getZ() - (depot.getZ() + 0.5);
+        double dx = this.minecraft.player.getX() - (depot.getX() + 0.5);
+        double dy = this.minecraft.player.getY() - (depot.getY() + 0.5);
+        double dz = this.minecraft.player.getZ() - (depot.getZ() + 0.5);
         return dx * dx + dy * dy + dz * dz;
     }
 
@@ -455,58 +455,58 @@ public final class HubScreen extends Screen {
         List<Map.Entry<String, List<MarketRow>>> groups = shopGroups();
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < groups.size(); i++) {
             String owner = groups.get(i + scroll).getKey();
-            addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
+            addRenderableWidget(Button.builder(Component.literal("View"), b -> {
                 this.selectedShop = owner;
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+                rebuildWidgets();
+            }).bounds(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
     private void initOwnerShops() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
             this.selectedShop = null;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 60, 20).build());
-        addDrawableChild(ButtonWidget.builder(
-            Text.literal(shopSortInverted ? "Farthest" : "Closest"), b -> {
+            rebuildWidgets();
+        }).bounds(left, 70, 60, 20).build());
+        addRenderableWidget(Button.builder(
+            Component.literal(shopSortInverted ? "Farthest" : "Closest"), b -> {
                 this.shopSortInverted = !this.shopSortInverted;
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left + 240, 70, 100, 20).build());
+                rebuildWidgets();
+            }).bounds(left + 240, 70, 100, 20).build());
 
         List<ShopEntry> shops = selectedOwnerShops();
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             ShopEntry shop = shops.get(i + scroll);
-            addDrawableChild(ButtonWidget.builder(Text.literal("View"), b -> {
+            addRenderableWidget(Button.builder(Component.literal("View"), b -> {
                 this.selectedDepot = shop.depot();
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+                rebuildWidgets();
+            }).bounds(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
     private void initDepotItems() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
             this.selectedDepot = null;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 60, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Get shop book"), b ->
+            rebuildWidgets();
+        }).bounds(left, 70, 60, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Get shop book"), b ->
                 ClientPlayNetworking.send(new EconomyNetworking.RequestShopBook(selectedShop, selectedDepot)))
-            .dimensions(left + 66, 70, 100, 20).build());
+            .bounds(left + 66, 70, 100, 20).build());
 
         List<MarketRow> rows = selectedDepotRows();
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             MarketRow row = rows.get(i + scroll);
-            ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b ->
+            Button buy = Button.builder(Component.literal("Buy"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.BuyListing(row.index())))
-                .dimensions(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 50, 20).build();
+                .bounds(left + 280, DETAIL_LIST_TOP + i * ROW_HEIGHT - 4, 50, 20).build();
             buy.active = row.buyable();
-            addDrawableChild(buy);
+            addRenderableWidget(buy);
         }
     }
 
@@ -533,84 +533,84 @@ public final class HubScreen extends Screen {
 
     private void initMyShopList() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("New shop"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("New shop"), b -> {
             this.shopView = ShopView.CREATE;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 100, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Server shop"), b -> {
+            rebuildWidgets();
+        }).bounds(left, 70, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Server shop"), b -> {
             this.shopView = ShopView.SERVER;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left + 106, 70, 100, 20).build());
+            rebuildWidgets();
+        }).bounds(left + 106, 70, 100, 20).build());
 
         List<MyShop> shops = myShops();
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             MyShop shop = shops.get(i + scroll);
-            addDrawableChild(ButtonWidget.builder(Text.literal("Manage"), b -> {
+            addRenderableWidget(Button.builder(Component.literal("Manage"), b -> {
                 this.selectedMyDepot = shop.depot();
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left + 280, MY_SHOPS_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+                rebuildWidgets();
+            }).bounds(left + 280, MY_SHOPS_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
     private void initMyShop() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
             this.selectedMyDepot = null;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 60, 20).build());
+            rebuildWidgets();
+        }).bounds(left, 70, 60, 20).build());
 
         List<ShopRow> rows = myDepotRows();
-        nameField = new TextFieldWidget(this.textRenderer, left, 100, 150, 20, Text.literal("Shop name"));
+        nameField = new EditBox(this.font, left, 100, 150, 20, Component.literal("Shop name"));
         nameField.setMaxLength(info.mudbourn.mmseconomy.market.Marketplace.MAX_SHOP_NAME);
-        nameField.setPlaceholder(Text.literal("Shop name"));
-        nameField.setText(rows.isEmpty() ? "" : rows.get(0).shopName());
-        addDrawableChild(nameField);
-        addDrawableChild(ButtonWidget.builder(Text.literal("Rename"), b ->
-                ClientPlayNetworking.send(new EconomyNetworking.RenameShop(selectedMyDepot, nameField.getText())))
-            .dimensions(left + 156, 100, 80, 20).build());
+        nameField.setHint(Component.literal("Shop name"));
+        nameField.setValue(rows.isEmpty() ? "" : rows.get(0).shopName());
+        addRenderableWidget(nameField);
+        addRenderableWidget(Button.builder(Component.literal("Rename"), b ->
+                ClientPlayNetworking.send(new EconomyNetworking.RenameShop(selectedMyDepot, nameField.getValue())))
+            .bounds(left + 156, 100, 80, 20).build());
 
-        priceField = new TextFieldWidget(this.textRenderer, left, 124, 90, 20, Text.literal("Price"));
-        priceField.setPlaceholder(Text.literal("12.34"));
-        addDrawableChild(priceField);
-        addDrawableChild(ButtonWidget.builder(Text.literal("List held item here"), b -> {
-            long price = Currency.parse(priceField.getText());
+        priceField = new EditBox(this.font, left, 124, 90, 20, Component.literal("Price"));
+        priceField.setHint(Component.literal("12.34"));
+        addRenderableWidget(priceField);
+        addRenderableWidget(Button.builder(Component.literal("List held item here"), b -> {
+            long price = Currency.parse(priceField.getValue());
             if (price > 0) {
                 ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price, selectedMyDepot));
             }
-        }).dimensions(left + 96, 124, 140, 20).build());
+        }).bounds(left + 96, 124, 140, 20).build());
 
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ShopRow row = rows.get(i + scroll);
-            addDrawableChild(ButtonWidget.builder(Text.literal("Unlist"), b ->
+            addRenderableWidget(Button.builder(Component.literal("Unlist"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.Unlist(row.index())))
-                .dimensions(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
+                .bounds(left + 280, SHOP_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build());
         }
     }
 
     private void initShopCreate() {
         int left = this.width / 2 - 170;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
             this.shopView = ShopView.MANAGE;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left, 70, 60, 20).build());
+            rebuildWidgets();
+        }).bounds(left, 70, 60, 20).build());
 
-        priceField = new TextFieldWidget(this.textRenderer, left, 132, 90, 20, Text.literal("Price"));
-        priceField.setPlaceholder(Text.literal("12.34"));
-        addDrawableChild(priceField);
-        addDrawableChild(ButtonWidget.builder(Text.literal("Open shop with held item"), b -> {
-            long price = Currency.parse(priceField.getText());
+        priceField = new EditBox(this.font, left, 132, 90, 20, Component.literal("Price"));
+        priceField.setHint(Component.literal("12.34"));
+        addRenderableWidget(priceField);
+        addRenderableWidget(Button.builder(Component.literal("Open shop with held item"), b -> {
+            long price = Currency.parse(priceField.getValue());
             if (price > 0) {
                 ClientPlayNetworking.send(new EconomyNetworking.ListHeld(price, null));
                 this.shopView = ShopView.MANAGE;
                 this.scroll = 0;
-                clearAndInit();
+                rebuildWidgets();
             }
-        }).dimensions(left + 96, 132, 180, 20).build());
+        }).bounds(left + 96, 132, 180, 20).build());
     }
 
     // The catalog rows in the category currently being browsed.
@@ -627,52 +627,52 @@ public final class HubScreen extends Screen {
     private void initServerShop() {
         int left = this.width / 2 - 170;
         if (data.nearDepot()) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> {
+            addRenderableWidget(Button.builder(Component.literal("Back"), b -> {
                 this.shopView = ShopView.MANAGE;
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left, 70, 60, 20).build());
+                rebuildWidgets();
+            }).bounds(left, 70, 60, 20).build());
         }
-        ButtonWidget buy = ButtonWidget.builder(Text.literal("Buy"), b -> {
+        Button buy = Button.builder(Component.literal("Buy"), b -> {
             this.serverShopBuy = true;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left + 216, 70, 60, 20).build();
+            rebuildWidgets();
+        }).bounds(left + 216, 70, 60, 20).build();
         buy.active = !serverShopBuy;
-        addDrawableChild(buy);
-        ButtonWidget sell = ButtonWidget.builder(Text.literal("Sell"), b -> {
+        addRenderableWidget(buy);
+        Button sell = Button.builder(Component.literal("Sell"), b -> {
             this.serverShopBuy = false;
             this.scroll = 0;
-            clearAndInit();
-        }).dimensions(left + 280, 70, 60, 20).build();
+            rebuildWidgets();
+        }).bounds(left + 280, 70, 60, 20).build();
         sell.active = serverShopBuy;
-        addDrawableChild(sell);
+        addRenderableWidget(sell);
 
         int catWidth = 110;
         for (int c = 0; c < CATEGORY_LABELS.length; c++) {
             int category = c;
-            ButtonWidget tab = ButtonWidget.builder(Text.literal(CATEGORY_LABELS[c]), b -> {
+            Button tab = Button.builder(Component.literal(CATEGORY_LABELS[c]), b -> {
                 this.serverShopCategory = category;
                 this.scroll = 0;
-                clearAndInit();
-            }).dimensions(left + c * (catWidth + 4), 94, catWidth, 20).build();
+                rebuildWidgets();
+            }).bounds(left + c * (catWidth + 4), 94, catWidth, 20).build();
             tab.active = category != serverShopCategory;
-            addDrawableChild(tab);
+            addRenderableWidget(tab);
         }
 
         List<ServerShopRow> rows = catalogRows();
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ServerShopRow row = rows.get(i + scroll);
             String label = serverShopBuy ? "Buy" : "Sell";
-            ButtonWidget trade = ButtonWidget.builder(Text.literal(label), b -> {
+            Button trade = Button.builder(Component.literal(label), b -> {
                 if (serverShopBuy) {
                     ClientPlayNetworking.send(new EconomyNetworking.ServerBuy(row.itemId(), 1));
                 } else {
                     ClientPlayNetworking.send(new EconomyNetworking.ServerSell(row.itemId(), 1));
                 }
-            }).dimensions(left + 280, SERVER_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
+            }).bounds(left + 280, SERVER_LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
             trade.active = data.nearDepot();
-            addDrawableChild(trade);
+            addRenderableWidget(trade);
         }
     }
 
@@ -715,13 +715,13 @@ public final class HubScreen extends Screen {
         }
     }
 
-    private TextFieldWidget dealField(int x, int y, int width, String hint, String value,
+    private EditBox dealField(int x, int y, int width, String hint, String value,
                                       java.util.function.Consumer<String> sink) {
-        TextFieldWidget field = new TextFieldWidget(this.textRenderer, x, y, width, 20, Text.literal(hint));
-        field.setPlaceholder(Text.literal(hint));
-        field.setText(value);
-        field.setChangedListener(sink);
-        addDrawableChild(field);
+        EditBox field = new EditBox(this.font, x, y, width, 20, Component.literal(hint));
+        field.setHint(Component.literal(hint));
+        field.setValue(value);
+        field.setResponder(sink);
+        addRenderableWidget(field);
         return field;
     }
 
@@ -729,15 +729,15 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         dealField(left, 70, 56, "Lot size", dealLotSize, text -> dealLotSize = text);
         dealField(left + 60, 70, 80, "Price/lot", dealLotPrice, text -> dealLotPrice = text);
-        ButtonWidget add = ButtonWidget.builder(Text.literal("Add offer (held)"), b -> {
+        Button add = Button.builder(Component.literal("Add offer (held)"), b -> {
             int lotSize = parseCount(dealLotSize);
             long price = Currency.parse(dealLotPrice);
             if (lotSize > 0 && price > 0) {
                 ClientPlayNetworking.send(new EconomyNetworking.WholesaleAdd(lotSize, price));
             }
-        }).dimensions(left + 144, 70, 110, 20).build();
+        }).bounds(left + 144, 70, 110, 20).build();
         add.active = data.wholesale();
-        addDrawableChild(add);
+        addRenderableWidget(add);
         dealField(left, 94, 56, "Lots/qty", dealQuantity, text -> dealQuantity = text);
         dealField(left + 60, 94, 80, "Total", dealTotal, text -> dealTotal = text);
 
@@ -793,15 +793,15 @@ public final class HubScreen extends Screen {
     }
 
     private void addDealButton(String label, int x, int y, int width, Runnable action) {
-        ButtonWidget button = ButtonWidget.builder(Text.literal(label), b -> action.run())
-            .dimensions(x, y, width, 20).build();
+        Button button = Button.builder(Component.literal(label), b -> action.run())
+            .bounds(x, y, width, 20).build();
         button.active = data.wholesale();
-        addDrawableChild(button);
+        addRenderableWidget(button);
     }
 
-    private void renderDeals(DrawContext context, int mouseX, int mouseY) {
+    private void renderDeals(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             "Set lots (or quantity) and an optional total, then Order or Request.",
             left + 148, 100, 0xFFAAAAAA);
         List<DealLine> lines = dealLines();
@@ -812,7 +812,7 @@ public final class HubScreen extends Screen {
             String second = "";
             ItemStack icon = ItemStack.EMPTY;
             switch (line.kind()) {
-                case HEADER -> context.drawTextWithShadow(this.textRenderer, line.text(), left, y + 4, 0xFFFFE066);
+                case HEADER -> context.text(this.font, line.text(), left, y + 4, 0xFFFFE066);
                 case MINE, OFFER -> {
                     WholesaleOfferRow offer = line.offer();
                     icon = offer.stack();
@@ -837,15 +837,15 @@ public final class HubScreen extends Screen {
                 }
             }
             if (line.kind() != DealKind.HEADER) {
-                context.drawTextWithShadow(this.textRenderer,
-                    this.textRenderer.trimToWidth(first, 190), left + ICON_WIDTH, y, 0xFFFFFFFF);
-                context.drawTextWithShadow(this.textRenderer,
-                    this.textRenderer.trimToWidth(second, 190), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+                context.text(this.font,
+                    this.font.plainSubstrByWidth(first, 190), left + ICON_WIDTH, y, 0xFFFFFFFF);
+                context.text(this.font,
+                    this.font.plainSubstrByWidth(second, 190), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
                 drawItemRow(context, icon, left, y, mouseX, mouseY);
             }
         }
         if (!data.wholesale()) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "Stand at a depot you own to trade wholesale.", left, this.height - 60, 0xFFAAAAAA);
         }
     }
@@ -854,40 +854,40 @@ public final class HubScreen extends Screen {
         int left = this.width / 2 - 170;
         int offerings = data.offerings().size();
         int total = offerings + data.vault().size();
-        addDrawableChild(ButtonWidget.builder(Text.literal("Vault bonds"), b ->
+        addRenderableWidget(Button.builder(Component.literal("Vault bonds"), b ->
                 ClientPlayNetworking.send(new EconomyNetworking.BondVault()))
-            .dimensions(left, this.height - 28, 66, 20).build());
+            .bounds(left, this.height - 28, 66, 20).build());
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < total; i++) {
             int row = i + scroll;
             int y = LIST_TOP + i * ROW_HEIGHT - 4;
             if (row < offerings) {
                 BondOfferingRow offering = data.offerings().get(row);
                 if (offering.own()) {
-                    addDrawableChild(ButtonWidget.builder(Text.literal("Withdraw"), b ->
+                    addRenderableWidget(Button.builder(Component.literal("Withdraw"), b ->
                             ClientPlayNetworking.send(new EconomyNetworking.BondCancel(offering.id())))
-                        .dimensions(left + 280, y, 60, 20).build());
+                        .bounds(left + 280, y, 60, 20).build());
                 } else {
-                    ButtonWidget buy = ButtonWidget.builder(Text.literal("Invest"), b ->
+                    Button buy = Button.builder(Component.literal("Invest"), b ->
                             ClientPlayNetworking.send(new EconomyNetworking.BondBuy(offering.id())))
-                        .dimensions(left + 280, y, 60, 20).build();
+                        .bounds(left + 280, y, 60, 20).build();
                     buy.active = data.balance() >= offering.principal();
-                    addDrawableChild(buy);
+                    addRenderableWidget(buy);
                 }
             } else {
                 VaultBondRow held = data.vault().get(row - offerings);
-                addDrawableChild(ButtonWidget.builder(Text.literal("Take out"), b ->
+                addRenderableWidget(Button.builder(Component.literal("Take out"), b ->
                         ClientPlayNetworking.send(new EconomyNetworking.BondWithdraw(held.index())))
-                    .dimensions(left + 280, y, 60, 20).build());
+                    .bounds(left + 280, y, 60, 20).build());
             }
         }
     }
 
-    private void renderBonds(DrawContext context, int mouseX, int mouseY) {
+    private void renderBonds(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         int offerings = data.offerings().size();
         int total = offerings + data.vault().size();
         if (total == 0) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "No bonds on offer and none in your vault.", left, LIST_TOP, 0xFFAAAAAA);
             return;
         }
@@ -897,18 +897,18 @@ public final class HubScreen extends Screen {
             int y = LIST_TOP + i * ROW_HEIGHT;
             if (row < offerings) {
                 BondOfferingRow offering = data.offerings().get(row);
-                context.drawTextWithShadow(this.textRenderer,
+                context.text(this.font,
                     offering.issuer() + "  " + Currency.format(offering.principal()) + "  "
                         + BondPaper.percent(offering.couponBps()) + " every " + offering.couponDays() + " days",
                     left + ICON_WIDTH, y, 0xFFFFFFFF);
-                context.drawTextWithShadow(this.textRenderer,
+                context.text(this.font,
                     "term " + offering.termDays() + " days, " + offering.remaining() + " left",
                     left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             } else {
                 VaultBondRow held = data.vault().get(row - offerings);
-                context.drawTextWithShadow(this.textRenderer, "Vaulted", left + ICON_WIDTH, y, 0xFFFFE066);
-                context.drawTextWithShadow(this.textRenderer,
-                    this.textRenderer.trimToWidth(held.text(), 210), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+                context.text(this.font, "Vaulted", left + ICON_WIDTH, y, 0xFFFFE066);
+                context.text(this.font,
+                    this.font.plainSubstrByWidth(held.text(), 210), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             }
             drawItemRow(context, icon, left, y, mouseX, mouseY);
         }
@@ -921,23 +921,23 @@ public final class HubScreen extends Screen {
             if (!loan.owed()) {
                 continue;
             }
-            ButtonWidget payOff = ButtonWidget.builder(Text.literal("Pay off"), b ->
+            Button payOff = Button.builder(Component.literal("Pay off"), b ->
                     ClientPlayNetworking.send(new EconomyNetworking.LoanRepay(loan.id())))
-                .dimensions(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
+                .bounds(left + 280, LIST_TOP + i * ROW_HEIGHT - 4, 60, 20).build();
             payOff.active = data.balance() >= loan.payoff();
-            addDrawableChild(payOff);
+            addRenderableWidget(payOff);
         }
     }
 
-    private void renderLoans(DrawContext context, int mouseX, int mouseY) {
+    private void renderLoans(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         String bank = data.bankLoanTerms().isEmpty()
             ? "The bank is not lending. Ask a player with /loan request."
             : "Bank lends " + data.bankLoanTerms() + ": /loan bank <amount> <payments>";
-        context.drawTextWithShadow(this.textRenderer,
-            this.textRenderer.trimToWidth(bank, 340), left, this.height - 44, 0xFFAAAAAA);
+        context.text(this.font,
+            this.font.plainSubstrByWidth(bank, 340), left, this.height - 44, 0xFFAAAAAA);
         if (data.loans().isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "You have no loans.", left, LIST_TOP, 0xFFAAAAAA);
+            context.text(this.font, "You have no loans.", left, LIST_TOP, 0xFFAAAAAA);
             return;
         }
         ItemStack icon = new ItemStack(ModItems.LOAN_DEED);
@@ -949,10 +949,10 @@ public final class HubScreen extends Screen {
             String second = split < 0
                 ? ""
                 : loan.text().substring(split + 2) + (loan.owed() ? "  pay off " + Currency.format(loan.payoff()) : "");
-            context.drawTextWithShadow(this.textRenderer,
-                this.textRenderer.trimToWidth(first, 250), left + ICON_WIDTH, y, loan.owed() ? 0xFFFFE066 : 0xFFFFFFFF);
-            context.drawTextWithShadow(this.textRenderer,
-                this.textRenderer.trimToWidth(second, 250), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+            context.text(this.font,
+                this.font.plainSubstrByWidth(first, 250), left + ICON_WIDTH, y, loan.owed() ? 0xFFFFE066 : 0xFFFFFFFF);
+            context.text(this.font,
+                this.font.plainSubstrByWidth(second, 250), left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             drawItemRow(context, icon, left, y, mouseX, mouseY);
         }
     }
@@ -992,13 +992,13 @@ public final class HubScreen extends Screen {
         int clamped = Math.max(0, Math.min(max, next));
         if (clamped != scroll) {
             scroll = clamped;
-            clearAndInit();
+            rebuildWidgets();
         }
         return true;
     }
 
     private void sendBank(boolean deposit, boolean chips) {
-        long amount = Currency.parse(bankField.getText());
+        long amount = Currency.parse(bankField.getValue());
         if (amount <= 0) {
             return;
         }
@@ -1006,10 +1006,10 @@ public final class HubScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(this.textRenderer,
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
+        context.centeredText(this.font, this.title, this.width / 2, 12, 0xFFFFFFFF);
+        context.centeredText(this.font,
             "Balance: " + Currency.format(data.balance()), this.width / 2, 56, 0xFFFFE066);
 
         switch (tab) {
@@ -1024,43 +1024,43 @@ public final class HubScreen extends Screen {
         }
     }
 
-    private void renderAdmin(DrawContext context) {
+    private void renderAdmin(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             "Taxes collected (Treasury): " + Currency.format(data.treasury()), left, 74, 0xFFFFE066);
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             "Items bought by players (history / available now)", left, 90, 0xFFFFFFFF);
         List<LibraryRow> library = data.library();
         if (library.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "Nothing bought yet.", left, DETAIL_LIST_TOP + 10, 0xFFAAAAAA);
             return;
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < library.size(); i++) {
             LibraryRow row = library.get(i + scroll);
             int y = DETAIL_LIST_TOP + 10 + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer, row.name(), left, y, 0xFFFFFFFF);
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font, row.name(), left, y, 0xFFFFFFFF);
+            context.text(this.font,
                 "bought " + row.bought() + "  available " + row.count(), left, y + 10, 0xFFAAAAAA);
         }
     }
 
-    private void renderHistory(DrawContext context) {
+    private void renderHistory(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
         List<HistoryEntry> rows = historyRows();
         if (!historyLoaded) {
-            context.drawTextWithShadow(this.textRenderer, "Loading...", left, 100, 0xFFAAAAAA);
+            context.text(this.font, "Loading...", left, 100, 0xFFAAAAAA);
             return;
         }
         if (rows.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No entries.", left, 100, 0xFFAAAAAA);
+            context.text(this.font, "No entries.", left, 100, 0xFFAAAAAA);
             return;
         }
         int top = 100;
         int visible = Math.min(ROWS_VISIBLE + 1, rows.size() - scroll);
         for (int i = 0; i < visible; i++) {
             HistoryEntry entry = rows.get(i + scroll);
-            context.drawTextWithShadow(this.textRenderer, historyRow(entry), left, top + i * 14, 0xFFE0E0E0);
+            context.text(this.font, historyRow(entry), left, top + i * 14, 0xFFE0E0E0);
         }
     }
 
@@ -1081,26 +1081,26 @@ public final class HubScreen extends Screen {
         return builder.toString();
     }
 
-    private void renderBank(DrawContext context) {
+    private void renderBank(GuiGraphicsExtractor context) {
         int centerX = this.width / 2;
-        context.drawCenteredTextWithShadow(this.textRenderer,
+        context.centeredText(this.font,
             "Pocket: " + Currency.format(data.pocket()), centerX, 70, 0xFFFFFFFF);
         if (data.bankOccupiedByOther()) {
-            context.drawCenteredTextWithShadow(this.textRenderer,
+            context.centeredText(this.font,
                 "This bank is occupied. Try another.", centerX, 84, 0xFFFF8080);
         }
 
-        context.drawCenteredTextWithShadow(this.textRenderer,
+        context.centeredText(this.font,
             "1 Colt = " + data.coltRatio() + " Pice    Interest: "
                 + data.interestPercent() + "% every " + data.interestDays() + " days",
             centerX, 188, 0xFFAAAAAA);
-        context.drawCenteredTextWithShadow(this.textRenderer,
+        context.centeredText(this.font,
             "Reach 2 blocks at the face.  A Colt/Pice block = "
                 + info.mudbourn.mmseconomy.economy.Gems.blockUnits() + " gems.",
             centerX, 200, 0xFFAAAAAA);
     }
 
-    private void renderMarket(DrawContext context, int mouseX, int mouseY) {
+    private void renderMarket(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         if (selectedShop == null) {
             renderShopList(context);
         } else if (selectedDepot == null) {
@@ -1111,38 +1111,38 @@ public final class HubScreen extends Screen {
         renderMarketHint(context);
     }
 
-    private void renderShopList(DrawContext context) {
+    private void renderShopList(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
         List<Map.Entry<String, List<MarketRow>>> groups = shopGroups();
         if (groups.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No shops yet.", left, LIST_TOP, 0xFFAAAAAA);
+            context.text(this.font, "No shops yet.", left, LIST_TOP, 0xFFAAAAAA);
             return;
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < groups.size(); i++) {
             Map.Entry<String, List<MarketRow>> group = groups.get(i + scroll);
             int y = LIST_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer, group.getKey(), left, y, 0xFFFFFFFF);
+            context.text(this.font, group.getKey(), left, y, 0xFFFFFFFF);
             int count = group.getValue().size();
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 count + (count == 1 ? " listing" : " listings"), left, y + 10, 0xFFAAAAAA);
         }
     }
 
-    private void renderOwnerShops(DrawContext context) {
+    private void renderOwnerShops(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             selectedShop + "'s shops", left + 68, 76, 0xFFFFFFFF);
         List<ShopEntry> shops = selectedOwnerShops();
         if (shops.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No shops.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
+            context.text(this.font, "No shops.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
             return;
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             ShopEntry shop = shops.get(i + scroll);
             BlockPos depot = shop.depot();
             int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer, shopLabel(shop.name(), depot), left, y, 0xFFFFFFFF);
-            context.drawTextWithShadow(this.textRenderer, shopDetail(depot, shop.name(), shop.rows().size()),
+            context.text(this.font, shopLabel(shop.name(), depot), left, y, 0xFFFFFFFF);
+            context.text(this.font, shopDetail(depot, shop.name(), shop.rows().size()),
                 left, y + 10, 0xFFAAAAAA);
         }
     }
@@ -1155,45 +1155,45 @@ public final class HubScreen extends Screen {
     }
 
     // Draws a listing's item icon and, when the mouse is over its row, the full item tooltip.
-    private void drawItemRow(DrawContext context, ItemStack stack, int left, int y, int mouseX, int mouseY) {
+    private void drawItemRow(GuiGraphicsExtractor context, ItemStack stack, int left, int y, int mouseX, int mouseY) {
         if (stack.isEmpty()) {
             return;
         }
-        context.drawItem(stack, left, y - 4);
+        context.item(stack, left, y - 4);
         if (mouseX >= left && mouseX < left + 270 && mouseY >= y - 4 && mouseY < y - 4 + ROW_HEIGHT) {
-            context.drawItemTooltip(this.textRenderer, stack, mouseX, mouseY);
+            context.setTooltipForNextFrame(this.font, stack, mouseX, mouseY);
         }
     }
 
-    private void renderDepotItems(DrawContext context, int mouseX, int mouseY) {
+    private void renderDepotItems(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         List<MarketRow> rows = selectedDepotRows();
         String name = rows.isEmpty() ? "" : rows.get(0).shopName();
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             name.isEmpty()
                 ? selectedShop + " @ " + selectedDepot.getX() + ","
                     + selectedDepot.getY() + "," + selectedDepot.getZ()
                 : name + " (" + selectedShop + ")",
             left + 172, 76, 0xFFFFFFFF);
         if (rows.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
+            context.text(this.font, "No listings.", left, DETAIL_LIST_TOP, 0xFFAAAAAA);
             return;
         }
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             MarketRow row = rows.get(i + scroll);
             int y = DETAIL_LIST_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 row.name() + "  " + Currency.format(row.price()), left + ICON_WIDTH, y, 0xFFFFFFFF);
             String detail = row.buyable()
                 ? "in reach"
                 : "@ " + row.x() + "," + row.y() + "," + row.z();
-            context.drawTextWithShadow(this.textRenderer, detail, left + ICON_WIDTH, y + 10,
+            context.text(this.font, detail, left + ICON_WIDTH, y + 10,
                 row.buyable() ? 0xFF88CC88 : 0xFFAAAAAA);
             drawItemRow(context, row.stack(), left, y, mouseX, mouseY);
         }
     }
 
-    private void renderMarketHint(DrawContext context) {
+    private void renderMarketHint(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
         boolean canBuyAny = false;
         for (MarketRow row : data.listings()) {
@@ -1210,10 +1210,10 @@ public final class HubScreen extends Screen {
         } else {
             hint = "Browse only. Get near a shop's depot or owner to buy.";
         }
-        context.drawTextWithShadow(this.textRenderer, hint, left, this.height - 60, 0xFFAAAAAA);
+        context.text(this.font, hint, left, this.height - 60, 0xFFAAAAAA);
     }
 
-    private void renderShops(DrawContext context, int mouseX, int mouseY) {
+    private void renderShops(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         switch (activeShopView()) {
             case CREATE -> renderShopCreate(context);
@@ -1228,69 +1228,69 @@ public final class HubScreen extends Screen {
         }
     }
 
-    private void renderMyShopList(DrawContext context) {
+    private void renderMyShopList(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
         List<MyShop> shops = myShops();
         if (shops.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "You have no shop yet. Use New shop to open one.", left, 100, 0xFFAAAAAA);
             return;
         }
-        context.drawTextWithShadow(this.textRenderer, "Your shops", left, MY_SHOPS_TOP - 14, 0xFFFFFFFF);
+        context.text(this.font, "Your shops", left, MY_SHOPS_TOP - 14, 0xFFFFFFFF);
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < shops.size(); i++) {
             MyShop shop = shops.get(i + scroll);
             int y = MY_SHOPS_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer, shopLabel(shop.name(), shop.depot()), left, y, 0xFFFFFFFF);
-            context.drawTextWithShadow(this.textRenderer, shopDetail(shop.depot(), shop.name(), shop.rows().size()),
+            context.text(this.font, shopLabel(shop.name(), shop.depot()), left, y, 0xFFFFFFFF);
+            context.text(this.font, shopDetail(shop.depot(), shop.name(), shop.rows().size()),
                 left, y + 10, 0xFFAAAAAA);
         }
     }
 
-    private void renderMyShop(DrawContext context, int mouseX, int mouseY) {
+    private void renderMyShop(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
         List<ShopRow> rows = myDepotRows();
         String name = rows.isEmpty() ? "" : rows.get(0).shopName();
-        context.drawTextWithShadow(this.textRenderer, shopLabel(name, selectedMyDepot), left + 68, 76, 0xFFFFFFFF);
-        context.drawTextWithShadow(this.textRenderer, "Listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
+        context.text(this.font, shopLabel(name, selectedMyDepot), left + 68, 76, 0xFFFFFFFF);
+        context.text(this.font, "Listings", left, SHOP_LIST_TOP - 14, 0xFFFFFFFF);
         for (int i = 0; i < ROWS_VISIBLE && i + scroll < rows.size(); i++) {
             ShopRow row = rows.get(i + scroll);
             int y = SHOP_LIST_TOP + i * ROW_HEIGHT;
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 row.name() + "  " + Currency.format(row.price()) + "  stock " + row.stock(),
                 left + ICON_WIDTH, y + 2, 0xFFFFFFFF);
             drawItemRow(context, row.stack(), left, y + 2, mouseX, mouseY);
         }
     }
 
-    private void renderShopCreate(DrawContext context) {
+    private void renderShopCreate(GuiGraphicsExtractor context) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer, "Open a new shop", left + 68, 76, 0xFFFFFFFF);
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font, "Open a new shop", left + 68, 76, 0xFFFFFFFF);
+        context.text(this.font,
             "1. Stand in front of and look directly at the 2x2 barrel wall.", left, 100, 0xFFE0E0E0);
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             "2. Hold the item to sell and set its price.", left, 112, 0xFFE0E0E0);
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             "Opening a new wall costs a one-time setup fee.", left, 158, 0xFFAAAAAA);
     }
 
     // Builds a display stack for a server shop item id, empty when the id is unknown.
     private static ItemStack catalogStack(String itemId) {
         Identifier id = Identifier.tryParse(itemId);
-        return id == null ? ItemStack.EMPTY : new ItemStack(Registries.ITEM.get(id));
+        return id == null ? ItemStack.EMPTY : new ItemStack(BuiltInRegistries.ITEM.getValue(id));
     }
 
-    private void renderServerShop(DrawContext context, int mouseX, int mouseY) {
+    private void renderServerShop(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         int left = this.width / 2 - 170;
-        context.drawTextWithShadow(this.textRenderer,
+        context.text(this.font,
             serverShopBuy ? "Buy from server (1.5x in stock, 3x minted)" : "Sell to server",
             left, 118, 0xFFFFE066);
         if (!data.nearDepot()) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "Browse only. Stand at your own depot to trade.", left, this.height - 60, 0xFFAAAAAA);
         }
         List<ServerShopRow> rows = catalogRows();
         if (rows.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 "No items in this category.", left, SERVER_LIST_TOP, 0xFFAAAAAA);
             return;
         }
@@ -1298,33 +1298,33 @@ public final class HubScreen extends Screen {
             ServerShopRow row = rows.get(i + scroll);
             int y = SERVER_LIST_TOP + i * ROW_HEIGHT;
             long price = serverShopBuy ? row.buyPrice() : row.sell();
-            context.drawTextWithShadow(this.textRenderer,
+            context.text(this.font,
                 row.name() + "  " + Currency.format(price), left + ICON_WIDTH, y, 0xFFFFFFFF);
             String detail = serverShopBuy
                 ? (row.stock() > 0 ? "in stock " + row.stock() : "minted to order")
                 : "server pays " + Currency.format(row.sell());
-            context.drawTextWithShadow(this.textRenderer, detail, left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
+            context.text(this.font, detail, left + ICON_WIDTH, y + 10, 0xFFAAAAAA);
             drawItemRow(context, catalogStack(row.itemId()), left, y, mouseX, mouseY);
         }
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         ClientPlayNetworking.send(new EconomyNetworking.CloseHub());
-        super.close();
+        super.onClose();
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (!(this.getFocused() instanceof TextFieldWidget) && MmsEconomyClient.openHub.matchesKey(input)) {
-            this.close();
+    public boolean keyPressed(KeyEvent input) {
+        if (!(this.getFocused() instanceof EditBox) && MmsEconomyClient.openHub.matches(input)) {
+            this.onClose();
             return true;
         }
         return super.keyPressed(input);
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 }

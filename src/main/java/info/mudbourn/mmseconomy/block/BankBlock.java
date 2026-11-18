@@ -1,70 +1,62 @@
 package info.mudbourn.mmseconomy.block;
 
-import com.mojang.serialization.MapCodec;
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.HorizontalFacingBlock;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.state.StateManager;
-import net.minecraft.state.property.BooleanProperty;
-import net.minecraft.state.property.Properties;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.phys.BlockHitResult;
 
 // The proximity anchor for the bank hub tab; a furnace-style directional block whose occupied flag mirrors the lock.
-public class BankBlock extends HorizontalFacingBlock {
+public class BankBlock extends HorizontalDirectionalBlock {
 
-    public static final MapCodec<BankBlock> CODEC = createCodec(BankBlock::new);
+    public static final BooleanProperty OCCUPIED = BlockStateProperties.LIT;
 
-    public static final BooleanProperty OCCUPIED = Properties.LIT;
-
-    public BankBlock(Settings settings) {
+    public BankBlock(Properties settings) {
         super(settings);
-        setDefaultState(getDefaultState()
-            .with(FACING, net.minecraft.util.math.Direction.NORTH)
-            .with(OCCUPIED, false));
+        registerDefaultState(defaultBlockState()
+            .setValue(FACING, net.minecraft.core.Direction.NORTH)
+            .setValue(OCCUPIED, false));
     }
 
     @Override
-    protected MapCodec<? extends HorizontalFacingBlock> getCodec() {
-        return CODEC;
-    }
-
-    @Override
-    protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING, OCCUPIED);
     }
 
     @Override
-    public BlockState getPlacementState(ItemPlacementContext ctx) {
-        return getDefaultState()
-            .with(FACING, ctx.getHorizontalPlayerFacing().getOpposite())
-            .with(OCCUPIED, false);
+    public BlockState getStateForPlacement(BlockPlaceContext ctx) {
+        return defaultBlockState()
+            .setValue(FACING, ctx.getHorizontalDirection().getOpposite())
+            .setValue(OCCUPIED, false);
     }
 
     // Right-clicking opens the economy hub, honouring the same face and range rules as the /eco command.
     @Override
-    protected ActionResult onUse(BlockState state, World world, BlockPos pos,
-                                 PlayerEntity player, BlockHitResult hit) {
-        if (world.isClient()) {
-            return ActionResult.SUCCESS;
+    protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos,
+                                 Player player, BlockHitResult hit) {
+        if (world.isClientSide()) {
+            return InteractionResult.SUCCESS;
         }
-        if (player instanceof ServerPlayerEntity serverPlayer) {
+        if (player instanceof ServerPlayer serverPlayer) {
             BlockPos bank = info.mudbourn.mmseconomy.economy.BankAccess.nearestBank(
                 serverPlayer,
                 info.mudbourn.mmseconomy.MmsEconomy.config().bankRange);
             if (bank == null) {
-                serverPlayer.sendMessage(Text.literal("Stand directly in front of the bank's face to use it."), true);
-                return ActionResult.SUCCESS;
+                serverPlayer.sendOverlayMessage(Component.literal("Stand directly in front of the bank's face to use it."));
+                return InteractionResult.SUCCESS;
             }
             EconomyNetworking.openHub(serverPlayer, bank);
         }
-        return ActionResult.SUCCESS;
+        return InteractionResult.SUCCESS;
     }
 }

@@ -2,16 +2,16 @@ package info.mudbourn.mmseconomy.economy;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.Map;
 import java.util.TreeMap;
 
 // The admin-only archive of every item sold to the server, keyed by item id to a running count, saved on the overworld.
-public final class ServerLibrary extends PersistentState {
+public final class ServerLibrary extends SavedData {
 
     public static final Codec<ServerLibrary> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.unboundedMap(Codec.STRING, Codec.LONG).fieldOf("items").forGetter(state -> state.items),
@@ -19,8 +19,8 @@ public final class ServerLibrary extends PersistentState {
             .forGetter(state -> state.bought)
     ).apply(instance, ServerLibrary::new));
 
-    public static final PersistentStateType<ServerLibrary> TYPE = new PersistentStateType<>(
-        "mms_economy_server_library",
+    public static final SavedDataType<ServerLibrary> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_server_library"),
         ServerLibrary::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -41,7 +41,7 @@ public final class ServerLibrary extends PersistentState {
     }
 
     public static ServerLibrary get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // The current stock, item id to available count, in sorted order.
@@ -69,7 +69,7 @@ public final class ServerLibrary extends PersistentState {
         }
         items.merge(itemId, count, Long::sum);
         bought.merge(itemId, count, Long::sum);
-        markDirty();
+        setDirty();
     }
 
     // Removes up to count of an item, returning how many were actually taken.
@@ -88,7 +88,7 @@ public final class ServerLibrary extends PersistentState {
         } else {
             items.remove(itemId);
         }
-        markDirty();
+        setDirty();
         return taken;
     }
 }

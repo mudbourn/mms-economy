@@ -1,6 +1,6 @@
 # mms-economy
 
-A standalone Fabric mod for Minecraft 1.21.11 (Java 21) that adds a two-tier gem
+A standalone Fabric mod for Minecraft 26.3 (Java 25) that adds a two-tier gem
 currency to MMSLive01: a virtual per-player wallet, physical Pice and Colt gems,
 a bank, transaction taxes into a server treasury, player-to-player payments and
 wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.

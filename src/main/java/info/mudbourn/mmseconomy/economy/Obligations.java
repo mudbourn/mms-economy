@@ -2,16 +2,16 @@ package info.mudbourn.mmseconomy.economy;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.ArrayList;
 import java.util.List;
 
 // Every active bill, bond, loan, debt and bond offering, saved on the overworld.
-public final class Obligations extends PersistentState {
+public final class Obligations extends SavedData {
 
     public static final Codec<Obligations> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.LONG.fieldOf("lastDay").forGetter(state -> state.lastDay),
@@ -24,8 +24,8 @@ public final class Obligations extends PersistentState {
         Codec.INT.optionalFieldOf("version", 0).forGetter(state -> state.version)
     ).apply(instance, Obligations::new));
 
-    public static final PersistentStateType<Obligations> TYPE = new PersistentStateType<>(
-        "mms_economy_obligations",
+    public static final SavedDataType<Obligations> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_obligations"),
         Obligations::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -68,12 +68,12 @@ public final class Obligations extends PersistentState {
     }
 
     public static Obligations get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // The next id shared by bills, debts, loans and offerings.
     public int allocateId() {
-        markDirty();
+        setDirty();
         return nextId++;
     }
 
@@ -106,6 +106,6 @@ public final class Obligations extends PersistentState {
         debts.removeIf(debt -> debt.bond && dropped.contains(debt.ref));
         bonds.removeIf(bond -> !bond.byTreasury());
         version = VERSION;
-        markDirty();
+        setDirty();
     }
 }

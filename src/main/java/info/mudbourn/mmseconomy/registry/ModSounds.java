@@ -1,10 +1,10 @@
 package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvent;
 
 // Registers the mod's bank interaction sound events.
 public final class ModSounds {
@@ -21,7 +21,7 @@ public final class ModSounds {
     }
 
     private static SoundEvent register(String name) {
-        Identifier id = Identifier.of(MmsEconomy.MOD_ID, name);
-        return Registry.register(Registries.SOUND_EVENT, id, SoundEvent.of(id));
+        Identifier id = Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, name);
+        return Registry.register(BuiltInRegistries.SOUND_EVENT, id, SoundEvent.createVariableRangeEvent(id));
     }
 }

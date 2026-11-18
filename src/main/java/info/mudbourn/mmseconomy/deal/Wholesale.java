@@ -8,19 +8,19 @@ import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import info.mudbourn.mmseconomy.MmsEconomy;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.util.Uuids;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
 // Every wholesale offer and order, saved on the overworld.
-public final class Wholesale extends PersistentState {
+public final class Wholesale extends SavedData {
 
     public static final Codec<Wholesale> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.LONG.fieldOf("lastDay").forGetter(state -> state.lastDay),
@@ -29,8 +29,8 @@ public final class Wholesale extends PersistentState {
         lenient(WholesaleOrder.CODEC, Wholesale::loseOrder).fieldOf("orders").forGetter(state -> state.orders)
     ).apply(instance, Wholesale::new));
 
-    public static final PersistentStateType<Wholesale> TYPE = new PersistentStateType<>(
-        "mms_economy_wholesale",
+    public static final SavedDataType<Wholesale> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_wholesale"),
         Wholesale::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -85,7 +85,7 @@ public final class Wholesale extends PersistentState {
 
     // Logs an undecodable order and queues its escrow for refund when the buyer can still be read.
     private static void loseOrder(Dynamic<?> raw, String error) {
-        UUID buyer = raw.get("buyer").read(Uuids.CODEC).result().orElse(null);
+        UUID buyer = raw.get("buyer").read(UUIDUtil.AUTHLIB_CODEC).result().orElse(null);
         long escrow = raw.get("escrow").asLong(0L);
         MmsEconomy.LOGGER.error("Dropping unreadable wholesale order ({}), refunding {} to {}", error, escrow, buyer);
         if (buyer != null && escrow > 0) {
@@ -101,12 +101,12 @@ public final class Wholesale extends PersistentState {
     }
 
     public static Wholesale get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // The next id shared by offers and orders.
     public int allocateId() {
-        markDirty();
+        setDirty();
         return nextId++;
     }
 

@@ -2,20 +2,21 @@ package info.mudbourn.mmseconomy.economy;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 // The server-scoped tax reserve, one long in Pice, saved on the overworld.
-public final class Treasury extends PersistentState {
+public final class Treasury extends SavedData {
 
     public static final Codec<Treasury> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.LONG.fieldOf("balance").forGetter(state -> state.balance)
     ).apply(instance, Treasury::new));
 
-    public static final PersistentStateType<Treasury> TYPE = new PersistentStateType<>(
-        "mms_economy_treasury",
+    public static final SavedDataType<Treasury> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_treasury"),
         Treasury::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -31,7 +32,7 @@ public final class Treasury extends PersistentState {
     }
 
     public static Treasury get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     public long balance() {
@@ -43,7 +44,7 @@ public final class Treasury extends PersistentState {
             return;
         }
         this.balance += pice;
-        markDirty();
+        setDirty();
     }
 
     public boolean debit(long pice) {
@@ -51,7 +52,7 @@ public final class Treasury extends PersistentState {
             return false;
         }
         this.balance -= pice;
-        markDirty();
+        setDirty();
         return true;
     }
 }

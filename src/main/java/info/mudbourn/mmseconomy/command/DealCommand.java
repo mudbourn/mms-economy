@@ -10,12 +10,11 @@ import info.mudbourn.mmseconomy.deal.WholesaleManager;
 import info.mudbourn.mmseconomy.deal.WholesaleOffer;
 import info.mudbourn.mmseconomy.deal.WholesaleOrder;
 import info.mudbourn.mmseconomy.economy.Currency;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-
 import java.util.function.BiConsumer;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 
 // The /deal text fallback for wholesale offers and orders.
 public final class DealCommand {
@@ -23,91 +22,91 @@ public final class DealCommand {
     private DealCommand() {
     }
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal("deal")
-            .then(CommandManager.literal("offers")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("deal")
+            .then(Commands.literal("offers")
                 .executes(DealCommand::offers))
-            .then(CommandManager.literal("list")
+            .then(Commands.literal("list")
                 .executes(DealCommand::orders))
-            .then(CommandManager.literal("add")
-                .then(CommandManager.argument("lotSize", IntegerArgumentType.integer(1))
-                    .then(CommandManager.argument("price", StringArgumentType.word())
+            .then(Commands.literal("add")
+                .then(Commands.argument("lotSize", IntegerArgumentType.integer(1))
+                    .then(Commands.argument("price", StringArgumentType.word())
                         .executes(DealCommand::add))))
-            .then(CommandManager.literal("remove")
-                .then(CommandManager.argument("id", IntegerArgumentType.integer(0))
+            .then(Commands.literal("remove")
+                .then(Commands.argument("id", IntegerArgumentType.integer(0))
                     .executes(context -> byId(context, WholesaleManager::removeOffer))))
-            .then(CommandManager.literal("order")
-                .then(CommandManager.argument("offerId", IntegerArgumentType.integer(0))
-                    .then(CommandManager.argument("lots", IntegerArgumentType.integer(1))
+            .then(Commands.literal("order")
+                .then(Commands.argument("offerId", IntegerArgumentType.integer(0))
+                    .then(Commands.argument("lots", IntegerArgumentType.integer(1))
                         .executes(DealCommand::order))))
-            .then(CommandManager.literal("accept")
-                .then(CommandManager.argument("id", IntegerArgumentType.integer(0))
+            .then(Commands.literal("accept")
+                .then(Commands.argument("id", IntegerArgumentType.integer(0))
                     .executes(context -> byId(context, WholesaleManager::accept))))
-            .then(CommandManager.literal("decline")
-                .then(CommandManager.argument("id", IntegerArgumentType.integer(0))
+            .then(Commands.literal("decline")
+                .then(Commands.argument("id", IntegerArgumentType.integer(0))
                     .executes(context -> byId(context, WholesaleManager::decline))))
-            .then(CommandManager.literal("cancel")
-                .then(CommandManager.argument("id", IntegerArgumentType.integer(0))
+            .then(Commands.literal("cancel")
+                .then(Commands.argument("id", IntegerArgumentType.integer(0))
                     .executes(context -> byId(context, WholesaleManager::cancel)))));
     }
 
-    private static int byId(CommandContext<ServerCommandSource> context,
-                            BiConsumer<ServerPlayerEntity, Integer> action) throws CommandSyntaxException {
-        action.accept(context.getSource().getPlayerOrThrow(), IntegerArgumentType.getInteger(context, "id"));
+    private static int byId(CommandContext<CommandSourceStack> context,
+                            BiConsumer<ServerPlayer, Integer> action) throws CommandSyntaxException {
+        action.accept(context.getSource().getPlayerOrException(), IntegerArgumentType.getInteger(context, "id"));
         return 1;
     }
 
-    private static int add(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerCommandSource source = context.getSource();
+    private static int add(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
         long price = Currency.parse(StringArgumentType.getString(context, "price"));
         if (price <= 0) {
-            source.sendError(Text.literal("Set a price like 12.34 or a whole number of Pice."));
+            source.sendFailure(Component.literal("Set a price like 12.34 or a whole number of Pice."));
             return 0;
         }
-        WholesaleManager.addOffer(source.getPlayerOrThrow(), IntegerArgumentType.getInteger(context, "lotSize"), price);
+        WholesaleManager.addOffer(source.getPlayerOrException(), IntegerArgumentType.getInteger(context, "lotSize"), price);
         return 1;
     }
 
-    private static int order(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+    private static int order(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         WholesaleManager.orderOffer(
-            context.getSource().getPlayerOrThrow(),
+            context.getSource().getPlayerOrException(),
             IntegerArgumentType.getInteger(context, "offerId"),
             IntegerArgumentType.getInteger(context, "lots"));
         return 1;
     }
 
-    private static int offers(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
-        Wholesale state = Wholesale.get(player.getEntityWorld().getServer());
+    private static int offers(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        Wholesale state = Wholesale.get(player.level().getServer());
         if (state.offers.isEmpty()) {
-            player.sendMessage(Text.literal("No wholesale offers."), false);
+            player.sendSystemMessage(Component.literal("No wholesale offers."));
             return 1;
         }
         for (WholesaleOffer offer : state.offers) {
-            player.sendMessage(Text.literal("[" + offer.id() + "] " + offer.stack().getName().getString()
+            player.sendSystemMessage(Component.literal("[" + offer.id() + "] " + offer.stack().getHoverName().getString()
                 + " x" + offer.lotSize() + " per lot at " + Currency.format(offer.lotPrice())
-                + " by " + offer.sellerName()), false);
+                + " by " + offer.sellerName()));
         }
         return 1;
     }
 
-    private static int orders(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
-        Wholesale state = Wholesale.get(player.getEntityWorld().getServer());
+    private static int orders(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        Wholesale state = Wholesale.get(player.level().getServer());
         boolean any = false;
         for (WholesaleOrder order : state.orders) {
-            boolean incoming = order.seller.equals(player.getUuid());
-            if (!incoming && !order.buyer.equals(player.getUuid())) {
+            boolean incoming = order.seller.equals(player.getUUID());
+            if (!incoming && !order.buyer.equals(player.getUUID())) {
                 continue;
             }
             any = true;
-            player.sendMessage(Text.literal("[" + order.id + "] " + (incoming ? "from " + order.buyerName : "to " + order.sellerName)
-                + " " + order.items() + " x " + order.stack.getName().getString()
+            player.sendSystemMessage(Component.literal("[" + order.id + "] " + (incoming ? "from " + order.buyerName : "to " + order.sellerName)
+                + " " + order.items() + " x " + order.stack.getHoverName().getString()
                 + " for " + Currency.format(order.escrow)
-                + (order.inTransit ? " (in transit, " + order.remaining + " left)" : " (pending)")), false);
+                + (order.inTransit ? " (in transit, " + order.remaining + " left)" : " (pending)")));
         }
         if (!any) {
-            player.sendMessage(Text.literal("No wholesale orders."), false);
+            player.sendSystemMessage(Component.literal("No wholesale orders."));
         }
         return 1;
     }

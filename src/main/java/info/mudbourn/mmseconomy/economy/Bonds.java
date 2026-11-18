@@ -5,11 +5,11 @@ import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
 import info.mudbourn.mmseconomy.registry.ModItems;
-import net.minecraft.item.ItemStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
+import net.minecraft.world.item.ItemStack;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -58,12 +58,12 @@ public final class Bonds {
             0L,
             0L);
         state.bonds.add(bond);
-        state.markDirty();
+        state.setDirty();
         return bond;
     }
 
-    public static void give(ServerPlayerEntity player, Bond bond) {
-        player.getInventory().offerOrDrop(BondPaper.create(bond));
+    public static void give(ServerPlayer player, Bond bond) {
+        player.getInventory().placeItemBackInInventory(BondPaper.create(bond), Prediction.SERVER_ONLY);
     }
 
     // Moves due coupons and maturity into the bond: a period that met the playtime gate charges the issuer.
@@ -122,57 +122,57 @@ public final class Bonds {
     }
 
     // Deposits the paper into the player's bank vault when at a bank, otherwise redeems it in hand.
-    public static void use(ServerPlayerEntity player, ItemStack stack) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void use(ServerPlayer player, ItemStack stack) {
+        MinecraftServer server = player.level().getServer();
         String id = BondPaper.read(stack);
         if (server == null || id == null) {
-            player.sendMessage(Text.literal("This paper is blank; buy bonds with /bond buy."), false);
+            player.sendSystemMessage(Component.literal("This paper is blank; buy bonds with /bond buy."));
             return;
         }
 
         Obligations state = Obligations.get(server);
         Bond bond = state.bond(id);
         if (bond == null) {
-            player.sendMessage(Text.literal("This bond is not recognised or is already closed."), false);
+            player.sendSystemMessage(Component.literal("This bond is not recognised or is already closed."));
             return;
         }
         if (!bond.vault.isEmpty()) {
-            player.sendMessage(Text.literal("This bond is held in a bank vault and this paper is void."), false);
+            player.sendSystemMessage(Component.literal("This bond is held in a bank vault and this paper is void."));
             return;
         }
 
         if (BankAccess.inReach(player)) {
-            bond.vault = player.getUuid().toString();
+            bond.vault = player.getUUID().toString();
             restartPeriod(server, bond);
             bond.required = remainingTicks(server, bond);
-            stack.decrement(1);
-            state.markDirty();
-            player.sendMessage(Text.literal("Bond stored in your bank. Payments now go to your wallet."), false);
+            stack.shrink(1);
+            state.setDirty();
+            player.sendSystemMessage(Component.literal("Bond stored in your bank. Payments now go to your wallet."));
             settleVaulted(player, state, bond);
             return;
         }
         if (payOut(player, state, bond)) {
-            stack.decrement(1);
+            stack.shrink(1);
         }
     }
 
     // Stores every bond paper the player carries in their bank vault, at a bank.
-    public static void vaultCarried(ServerPlayerEntity player) {
+    public static void vaultCarried(ServerPlayer player) {
         if (!BankAccess.inReach(player)) {
-            player.sendMessage(Text.literal("Stand at a bank to vault bonds."), false);
+            player.sendSystemMessage(Component.literal("Stand at a bank to vault bonds."));
             return;
         }
         boolean found = false;
-        int size = player.getInventory().size();
+        int size = player.getInventory().getContainerSize();
         for (int slot = 0; slot < size; slot++) {
-            ItemStack stack = player.getInventory().getStack(slot);
-            if (stack.isOf(ModItems.BOND)) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (stack.is(ModItems.BOND)) {
                 found = true;
                 use(player, stack);
             }
         }
         if (!found) {
-            player.sendMessage(Text.literal("You carry no bond papers."), false);
+            player.sendSystemMessage(Component.literal("You carry no bond papers."));
         }
     }
 
@@ -182,7 +182,7 @@ public final class Bonds {
             if (bond.vault.isEmpty()) {
                 continue;
             }
-            ServerPlayerEntity owner = server.getPlayerManager().getPlayer(UUID.fromString(bond.vault));
+            ServerPlayer owner = server.getPlayerList().getPlayer(UUID.fromString(bond.vault));
             if (owner != null) {
                 settleVaulted(owner, state, bond);
             }
@@ -190,34 +190,34 @@ public final class Bonds {
     }
 
     // The bonds held in the player's bank vault, in storage order.
-    public static List<Bond> vaulted(Obligations state, ServerPlayerEntity player) {
-        String id = player.getUuid().toString();
+    public static List<Bond> vaulted(Obligations state, ServerPlayer player) {
+        String id = player.getUUID().toString();
         return state.bonds.stream()
             .filter(bond -> bond.vault.equals(id))
             .toList();
     }
 
     // Takes a vaulted bond back out as paper, at a bank.
-    public static void withdraw(ServerPlayerEntity player, int index) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    public static void withdraw(ServerPlayer player, int index) {
+        MinecraftServer server = player.level().getServer();
         if (server == null) {
             return;
         }
         if (!BankAccess.inReach(player)) {
-            player.sendMessage(Text.literal("Stand at a bank to take bonds out of your vault."), false);
+            player.sendSystemMessage(Component.literal("Stand at a bank to take bonds out of your vault."));
             return;
         }
         Obligations state = Obligations.get(server);
         List<Bond> held = vaulted(state, player);
         if (index < 1 || index > held.size()) {
-            player.sendMessage(Text.literal("No such bond in your vault."), false);
+            player.sendSystemMessage(Component.literal("No such bond in your vault."));
             return;
         }
         Bond bond = held.get(index - 1);
         bond.vault = "";
-        state.markDirty();
+        state.setDirty();
         give(player, bond);
-        player.sendMessage(Text.literal("Took the " + bond.issuerName + " bond out of your vault."), false);
+        player.sendSystemMessage(Component.literal("Took the " + bond.issuerName + " bond out of your vault."));
     }
 
     // A one-line summary of a bond for vault listings.
@@ -227,7 +227,7 @@ public final class Bonds {
             + bond.maturityDay + "; " + status(server, state, bond);
     }
 
-    private static void settleVaulted(ServerPlayerEntity owner, Obligations state, Bond bond) {
+    private static void settleVaulted(ServerPlayer owner, Obligations state, Bond bond) {
         if (bond.accrued() == 0 && !closable(state, bond)) {
             return;
         }
@@ -239,8 +239,8 @@ public final class Bonds {
     }
 
     // Pays the holder what the bond has accrued, taxing interest only, and returns true when it closed.
-    private static boolean payOut(ServerPlayerEntity player, Obligations state, Bond bond) {
-        MinecraftServer server = player.getEntityWorld().getServer();
+    private static boolean payOut(ServerPlayer player, Obligations state, Bond bond) {
+        MinecraftServer server = player.level().getServer();
         long headroom = headroom(player);
         long principal = Math.min(bond.accruedPrincipal, headroom);
         long interest = interestWithin(bond.accruedInterest, headroom - principal);
@@ -255,29 +255,29 @@ public final class Bonds {
             Wallet.deposit(player, net);
             History.log(player, new HistoryEntry(History.currentDay(player), HistoryCategory.DEAL, "", 0,
                 interest + principal, tax, net, bond.issuerName + " bond"));
-            player.sendMessage(Text.literal("Bond redeemed: received " + Currency.format(net)
+            player.sendSystemMessage(Component.literal("Bond redeemed: received " + Currency.format(net)
                 + " (interest " + Currency.format(interest) + ", tax " + Currency.format(tax)
-                + ", principal " + Currency.format(principal) + ")."), false);
+                + ", principal " + Currency.format(principal) + ")."));
         }
         if (bond.accrued() > 0 && headroom < Long.MAX_VALUE) {
-            player.sendMessage(Text.literal("Your wallet is full; the rest stays on the bond."), false);
+            player.sendSystemMessage(Component.literal("Your wallet is full; the rest stays on the bond."));
         }
 
-        state.markDirty();
+        state.setDirty();
         if (closable(state, bond)) {
             state.bonds.remove(bond);
-            player.sendMessage(Text.literal("The " + bond.issuerName
-                + " bond has matured and is fully repaid. It is now closed."), false);
+            player.sendSystemMessage(Component.literal("The " + bond.issuerName
+                + " bond has matured and is fully repaid. It is now closed."));
             return true;
         }
         if (bond.vault.isEmpty()) {
-            player.sendMessage(Text.literal("Bond status: " + status(server, state, bond)), false);
+            player.sendSystemMessage(Component.literal("Bond status: " + status(server, state, bond)));
         }
         return false;
     }
 
     // Wallet room left under the balance cap, or the long maximum when there is no cap.
-    private static long headroom(ServerPlayerEntity player) {
+    private static long headroom(ServerPlayer player) {
         long max = MmsEconomy.config().maxBalance;
         return max > 0 ? Math.max(0L, max - Wallet.balance(player)) : Long.MAX_VALUE;
     }
@@ -321,7 +321,7 @@ public final class Bonds {
     // World ticks left until the current period ends, at most one full period.
     private static long remainingTicks(MinecraftServer server, Bond bond) {
         long end = Math.min(bond.nextCoupon, bond.maturityDay) * 24000L;
-        long left = end - server.getOverworld().getTimeOfDay();
+        long left = end - server.overworld().getOverworldClockTime();
         return Math.max(1L, Math.min(left, bond.couponDays * 24000L));
     }
 
@@ -378,7 +378,7 @@ public final class Bonds {
             return take > 0 && treasury.debit(take) ? take : 0L;
         }
 
-        ServerPlayerEntity payer = server.getPlayerManager().getPlayer(UUID.fromString(payerId));
+        ServerPlayer payer = server.getPlayerList().getPlayer(UUID.fromString(payerId));
         if (payer == null) {
             return 0L;
         }

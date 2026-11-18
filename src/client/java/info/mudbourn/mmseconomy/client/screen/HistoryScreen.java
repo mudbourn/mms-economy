@@ -4,14 +4,13 @@ import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
 import info.mudbourn.mmseconomy.client.MmsEconomyClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.Text;
-
 import java.util.List;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.network.chat.Component;
 
 // The three-tab transaction ledger, opened by /eco history or the hub history tab.
 public final class HistoryScreen extends Screen {
@@ -34,7 +33,7 @@ public final class HistoryScreen extends Screen {
                          List<HistoryEntry> payments,
                          List<HistoryEntry> deals,
                          List<HistoryEntry> bills) {
-        super(Text.literal("Transaction History"));
+        super(Component.literal("Transaction History"));
         this.purchases = purchases;
         this.payments = payments;
         this.deals = deals;
@@ -45,16 +44,16 @@ public final class HistoryScreen extends Screen {
     protected void init() {
         int tabWidth = 90;
         int startX = this.width / 2 - (tabWidth * 4 + 12) / 2;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Purchases"), b -> select(HistoryCategory.PURCHASE))
-            .dimensions(startX, 28, tabWidth, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Payments"), b -> select(HistoryCategory.PAYMENT))
-            .dimensions(startX + tabWidth + 4, 28, tabWidth, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Deals"), b -> select(HistoryCategory.DEAL))
-            .dimensions(startX + (tabWidth + 4) * 2, 28, tabWidth, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Bills"), b -> select(HistoryCategory.BILL))
-            .dimensions(startX + (tabWidth + 4) * 3, 28, tabWidth, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
-            .dimensions(this.width / 2 - 100, this.height - 28, 200, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Purchases"), b -> select(HistoryCategory.PURCHASE))
+            .bounds(startX, 28, tabWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Payments"), b -> select(HistoryCategory.PAYMENT))
+            .bounds(startX + tabWidth + 4, 28, tabWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Deals"), b -> select(HistoryCategory.DEAL))
+            .bounds(startX + (tabWidth + 4) * 2, 28, tabWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Bills"), b -> select(HistoryCategory.BILL))
+            .bounds(startX + (tabWidth + 4) * 3, 28, tabWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
+            .bounds(this.width / 2 - 100, this.height - 28, 200, 20).build());
     }
 
     private void select(HistoryCategory category) {
@@ -72,9 +71,9 @@ public final class HistoryScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
+        context.centeredText(this.font, this.title, this.width / 2, 12, 0xFFFFFF);
 
         List<HistoryEntry> entries = current();
         int top = 56;
@@ -83,13 +82,13 @@ public final class HistoryScreen extends Screen {
         int x = this.width / 2 - 160;
 
         if (entries.isEmpty()) {
-            context.drawTextWithShadow(this.textRenderer, "No entries.", x, top, 0xAAAAAA);
+            context.text(this.font, "No entries.", x, top, 0xAAAAAA);
             return;
         }
 
         for (int i = 0; i < visible && i + scroll < entries.size(); i++) {
             HistoryEntry entry = entries.get(i + scroll);
-            context.drawTextWithShadow(this.textRenderer, rowText(entry), x, top + i * ROW_HEIGHT, 0xE0E0E0);
+            context.text(this.font, rowText(entry), x, top + i * ROW_HEIGHT, 0xE0E0E0);
         }
     }
 
@@ -119,16 +118,16 @@ public final class HistoryScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (!(this.getFocused() instanceof TextFieldWidget) && MmsEconomyClient.openHub.matchesKey(input)) {
-            this.close();
+    public boolean keyPressed(KeyEvent input) {
+        if (!(this.getFocused() instanceof EditBox) && MmsEconomyClient.openHub.matches(input)) {
+            this.onClose();
             return true;
         }
         return super.keyPressed(input);
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 }

@@ -2,25 +2,25 @@ package info.mudbourn.mmseconomy.economy;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.datafixer.DataFixTypes;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.PersistentStateType;
-
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 // Active play time per player in ticks; time spent idle for over five minutes does not count.
-public final class PlayTime extends PersistentState {
+public final class PlayTime extends SavedData {
 
     public static final Codec<PlayTime> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.unboundedMap(Codec.STRING, Codec.LONG).fieldOf("ticks").forGetter(state -> state.ticks)
     ).apply(instance, PlayTime::new));
 
-    public static final PersistentStateType<PlayTime> TYPE = new PersistentStateType<>(
-        "mms_economy_playtime",
+    public static final SavedDataType<PlayTime> TYPE = new SavedDataType<>(
+        Identifier.withDefaultNamespace("mms_economy_playtime"),
         PlayTime::new,
         CODEC,
         DataFixTypes.LEVEL);
@@ -45,7 +45,7 @@ public final class PlayTime extends PersistentState {
     }
 
     public static PlayTime get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     public long ticks(String uuid) {
@@ -60,26 +60,26 @@ public final class PlayTime extends PersistentState {
 
     // Once a second, credits each player who moved or looked around within the last five minutes.
     public static void tick(MinecraftServer server) {
-        long now = server.getTicks();
+        long now = server.getTickCount();
         if (now % CHECK_INTERVAL != 0) {
             return;
         }
 
         PlayTime state = get(server);
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            Seen previous = SEEN.get(player.getUuid());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            Seen previous = SEEN.get(player.getUUID());
             boolean moved = previous == null
                 || previous.x != player.getX()
                 || previous.y != player.getY()
                 || previous.z != player.getZ()
-                || previous.yaw != player.getYaw()
-                || previous.pitch != player.getPitch();
+                || previous.yaw != player.getYRot()
+                || previous.pitch != player.getXRot();
             long activeAt = moved ? now : previous.activeAt;
-            SEEN.put(player.getUuid(), new Seen(player.getX(), player.getY(), player.getZ(),
-                player.getYaw(), player.getPitch(), activeAt));
+            SEEN.put(player.getUUID(), new Seen(player.getX(), player.getY(), player.getZ(),
+                player.getYRot(), player.getXRot(), activeAt));
             if (now - activeAt <= IDLE_LIMIT) {
-                state.ticks.merge(player.getUuid().toString(), (long) CHECK_INTERVAL, Long::sum);
-                state.markDirty();
+                state.ticks.merge(player.getUUID().toString(), (long) CHECK_INTERVAL, Long::sum);
+                state.setDirty();
             }
         }
     }

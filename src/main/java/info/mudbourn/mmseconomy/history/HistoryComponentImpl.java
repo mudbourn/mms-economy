@@ -1,15 +1,14 @@
 package info.mudbourn.mmseconomy.history;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
-import net.minecraft.storage.ReadView;
-import net.minecraft.storage.WriteView;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 
 public final class HistoryComponentImpl implements HistoryComponent {
 
@@ -37,7 +36,7 @@ public final class HistoryComponentImpl implements HistoryComponent {
     }
 
     @Override
-    public void readData(ReadView view) {
+    public void readData(ValueInput view) {
         for (HistoryCategory category : HistoryCategory.values()) {
             Deque<HistoryEntry> buffer = buffers.get(category);
             buffer.clear();
@@ -47,9 +46,9 @@ public final class HistoryComponentImpl implements HistoryComponent {
     }
 
     @Override
-    public void writeData(WriteView view) {
+    public void writeData(ValueOutput view) {
         for (HistoryCategory category : HistoryCategory.values()) {
-            view.put(key(category), HistoryEntry.CODEC.listOf(), new ArrayList<>(buffers.get(category)));
+            view.store(key(category), HistoryEntry.CODEC.listOf(), new ArrayList<>(buffers.get(category)));
         }
     }
 

@@ -2,6 +2,9 @@
 build/
 run/
 
+# Third-party jars are other projects' redistributables.
+libs/
+
 .DS_Store
 *.pem
 *.log
