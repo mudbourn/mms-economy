@@ -21,8 +21,7 @@ public class MmsEconomyClient implements ClientModInitializer {
     public void onInitializeClient() {
         WalletHud.register();
 
-        KeyMapping.Category category = KeyMapping.Category.register(
-            Identifier.fromNamespaceAndPath(MmsEconomy.MOD_ID, "economy"));
+        KeyMapping.Category category = mmsCategory();
         openHub = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.mms_economy.open_hub",
             InputConstants.KEY_SEMICOLON,
@@ -61,5 +60,14 @@ public class MmsEconomyClient implements ClientModInitializer {
                         payload.bills()));
                 }
             }));
+    }
+    // The shared MMS controls category. Every mms mod registers it, and the first one wins.
+    private static KeyMapping.Category mmsCategory() {
+        Identifier id = Identifier.fromNamespaceAndPath("mms", "main");
+        try {
+            return KeyMapping.Category.register(id);
+        } catch (IllegalArgumentException alreadyRegistered) {
+            return new KeyMapping.Category(id);
+        }
     }
 }
