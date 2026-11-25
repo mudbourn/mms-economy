@@ -80,9 +80,18 @@ public class MmsEconomy implements ModInitializer {
             if (owed <= 0) {
                 return;
             }
-            info.mudbourn.mmseconomy.economy.Wallet.deposit(player, owed);
-            player.sendSystemMessage(Component.literal("Shop sales while away: +"
-                + info.mudbourn.mmseconomy.economy.Currency.format(owed)));
+            long paid = Math.min(owed, info.mudbourn.mmseconomy.economy.Wallet.headroom(player));
+            info.mudbourn.mmseconomy.economy.Wallet.deposit(player, paid);
+            payouts.hold(player.getUUID(), owed - paid);
+            if (paid > 0) {
+                player.sendSystemMessage(Component.literal("Paid while away: +"
+                    + info.mudbourn.mmseconomy.economy.Currency.format(paid)));
+            }
+            if (paid < owed) {
+                player.sendSystemMessage(Component.literal("Your wallet is full. "
+                    + info.mudbourn.mmseconomy.economy.Currency.format(owed - paid)
+                    + " is held until your next join."));
+            }
         });
 
         ServerPlayConnectionEvents.JOIN.register(info.mudbourn.mmseconomy.economy.Billing::onJoin);

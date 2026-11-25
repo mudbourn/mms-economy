@@ -57,6 +57,14 @@ public final class PendingPayouts extends SavedData {
         setDirty();
     }
 
+    // Keeps pice owed to the owner without a ledger row, for what a full wallet could not take.
+    public void hold(UUID owner, long pice) {
+        if (pice > 0) {
+            owed.merge(owner.toString(), pice, Long::sum);
+            setDirty();
+        }
+    }
+
     // Removes and returns everything owed to the owner, or zero when nothing is owed.
     public long claim(UUID owner) {
         Long amount = owed.remove(owner.toString());

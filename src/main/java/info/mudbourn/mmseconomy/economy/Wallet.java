@@ -35,6 +35,12 @@ public final class Wallet {
         ModComponents.WALLET.sync(player);
     }
 
+    // How much more the wallet can take before the cap, or Long.MAX_VALUE with no cap.
+    public static long headroom(Player player) {
+        long max = MmsEconomy.config().maxBalance;
+        return max > 0 ? Math.max(0L, max - balance(player)) : Long.MAX_VALUE;
+    }
+
     // Removes pice if affordable, returning false and leaving the balance untouched otherwise.
     public static boolean withdraw(ServerPlayer player, long pice) {
         if (pice <= 0) {
