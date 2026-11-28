@@ -16,9 +16,9 @@ import info.mudbourn.mmseconomy.market.Depot;
 import info.mudbourn.mmseconomy.market.Market;
 import info.mudbourn.mmseconomy.market.Marketplace;
 import info.mudbourn.mmseconomy.market.ShopListing;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -66,12 +66,12 @@ public final class WholesaleManager {
 
     private static Spot trader(ServerPlayer player) {
         if (!MmsEconomy.config().dealEnabled) {
-            player.sendSystemMessage(Component.literal("Wholesale deals are disabled."));
+            EconomyNetworking.notice(player, "Wholesale deals are disabled.", true);
             return null;
         }
         Spot spot = ownDepot(player);
         if (spot == null) {
-            player.sendSystemMessage(Component.literal("Stand at a depot you own to trade wholesale."));
+            EconomyNetworking.notice(player, "Stand at a depot you own to trade wholesale.", true);
             return null;
         }
         retarget(player, spot);
@@ -110,12 +110,14 @@ public final class WholesaleManager {
         }
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Hold the item you want to offer."));
+            EconomyNetworking.notice(player, "Hold the item you want to offer.", true);
             return;
         }
         if (lotSize < 1 || lotSize > MAX_LOT_SIZE || lotPrice <= 0) {
-            player.sendSystemMessage(Component.literal("Set a lot size from 1 to " + MAX_LOT_SIZE
-                + " and a positive price."));
+            EconomyNetworking.notice(
+                player,
+                "Set a lot size from 1 to " + MAX_LOT_SIZE + " and a positive price.",
+                true);
             return;
         }
         Wholesale state = Wholesale.get(player.level().getServer());
@@ -127,8 +129,11 @@ public final class WholesaleManager {
             held.copyWithCount(1),
             lotSize,
             lotPrice));
-        player.sendSystemMessage(Component.literal("Offered " + lotSize + " x " + held.getHoverName().getString()
-            + " per lot at " + Currency.format(lotPrice) + "."));
+        EconomyNetworking.notice(
+            player,
+            "Offered " + lotSize + " x " + held.getHoverName().getString() + " per lot at "
+                + Currency.format(lotPrice) + ".",
+            false);
     }
 
     public static void removeOffer(ServerPlayer player, int offerId) {
@@ -139,7 +144,7 @@ public final class WholesaleManager {
         Wholesale state = Wholesale.get(server);
         WholesaleOffer offer = state.offer(offerId);
         if (offer == null || !offer.seller().equals(player.getUUID())) {
-            player.sendSystemMessage(Component.literal("That is not your offer."));
+            EconomyNetworking.notice(player, "That is not your offer.", true);
             return;
         }
         state.offers.remove(offer);
@@ -149,7 +154,7 @@ public final class WholesaleManager {
                 refund(server, state, order, "withdrawn by the seller");
             }
         }
-        player.sendSystemMessage(Component.literal("Offer removed."));
+        EconomyNetworking.notice(player, "Offer removed.", false);
     }
 
     // Orders lots of a wholesale offer, escrowing the full price from the buyer's wallet.
@@ -161,11 +166,11 @@ public final class WholesaleManager {
         MinecraftServer server = buyer.level().getServer();
         WholesaleOffer offer = Wholesale.get(server).offer(offerId);
         if (offer == null || !live(server, offer.seller(), offer.depot())) {
-            buyer.sendSystemMessage(Component.literal("That offer is gone."));
+            EconomyNetworking.notice(buyer, "That offer is gone.", true);
             return;
         }
         if (lots < 1 || lots > MAX_LOTS || offer.lotPrice() > Long.MAX_VALUE / lots) {
-            buyer.sendSystemMessage(Component.literal("Order between 1 and " + MAX_LOTS + " lots."));
+            EconomyNetworking.notice(buyer, "Order between 1 and " + MAX_LOTS + " lots.", true);
             return;
         }
         place(buyer, buyerDepot, offer.seller(), offer.sellerName(), offer.depot(), offer.stack(),
@@ -192,11 +197,11 @@ public final class WholesaleManager {
         }
         ItemStack template = listing == null ? ItemStack.EMPTY : listing.template();
         if (template.isEmpty()) {
-            buyer.sendSystemMessage(Component.literal("That listing is gone."));
+            EconomyNetworking.notice(buyer, "That listing is gone.", true);
             return;
         }
         if (quantity < 1 || quantity > MAX_LOT_SIZE * MAX_LOTS || total <= 0) {
-            buyer.sendSystemMessage(Component.literal("Set a quantity and a positive total price."));
+            EconomyNetworking.notice(buyer, "Set a quantity and a positive total price.", true);
             return;
         }
         place(buyer, buyerDepot, listing.owner(), listing.ownerName(),
@@ -208,11 +213,11 @@ public final class WholesaleManager {
                               Spot sellerDepot, ItemStack stack, int lotSize, long lotPrice, int lots,
                               long total, int offerId) {
         if (seller.equals(buyer.getUUID())) {
-            buyer.sendSystemMessage(Component.literal("You cannot order from yourself."));
+            EconomyNetworking.notice(buyer, "You cannot order from yourself.", true);
             return;
         }
         if (!Wallet.withdraw(buyer, total)) {
-            buyer.sendSystemMessage(Component.literal("You need " + Currency.format(total) + " in your wallet."));
+            EconomyNetworking.notice(buyer, "You need " + Currency.format(total) + " in your wallet.", true);
             return;
         }
         MinecraftServer server = buyer.level().getServer();
@@ -246,8 +251,11 @@ public final class WholesaleManager {
             total, 0L, 0L, buyerName + " (order received)"));
         tell(server, seller, buyerName + " ordered " + order.items() + " x " + name + " for "
             + Currency.format(total) + ". Accept or decline in the Deals tab.");
-        buyer.sendSystemMessage(Component.literal("Ordered " + order.items() + " x " + name + " for "
-            + Currency.format(total) + ". The money is held until " + sellerName + " answers."));
+        EconomyNetworking.notice(
+            buyer,
+            "Ordered " + order.items() + " x " + name + " for " + Currency.format(total)
+                + ". The money is held until " + sellerName + " answers.",
+            false);
     }
 
     // The seller accepts: the goods leave their depot at once and travel until the next day.
@@ -258,22 +266,25 @@ public final class WholesaleManager {
         MinecraftServer server = player.level().getServer();
         WholesaleOrder order = Wholesale.get(server).order(orderId);
         if (order == null || order.inTransit || !order.seller.equals(player.getUUID())) {
-            player.sendSystemMessage(Component.literal("No such order to accept."));
+            EconomyNetworking.notice(player, "No such order to accept.", true);
             return;
         }
         if (!live(server, order.seller, order.sellerDepot)) {
-            player.sendSystemMessage(Component.literal("You no longer own the depot this order draws from. Decline it."));
+            EconomyNetworking.notice(player, "You no longer own the depot this order draws from. Decline it.", true);
             return;
         }
         if (!DebugAccess.has(player) && !order.sellerDepot.equals(ownDepot(player))) {
-            player.sendSystemMessage(Component.literal("Stand at the depot this order draws from to accept it."));
+            EconomyNetworking.notice(player, "Stand at the depot this order draws from to accept it.", true);
             return;
         }
         List<Container> barrels = barrels(server, order.sellerDepot);
         int items = order.items();
         if (barrels.isEmpty() || Depot.count(barrels, order.stack) < items) {
-            player.sendSystemMessage(Component.literal("Your depot does not hold " + items + " x "
-                + order.stack.getHoverName().getString() + ". Stock it or decline."));
+            EconomyNetworking.notice(
+                player,
+                "Your depot does not hold " + items + " x " + order.stack.getHoverName().getString()
+                    + ". Stock it or decline.",
+                true);
             return;
         }
         Depot.take(barrels, order.stack, items);
@@ -289,7 +300,7 @@ public final class WholesaleManager {
             order.escrow, 0L, 0L, order.sellerName + " (accepted)"));
         tell(server, order.buyer, order.sellerName + " accepted your order of " + items + " x " + name
             + ". It arrives at your depot at the next day.");
-        player.sendSystemMessage(Component.literal("Accepted. The goods are in transit and you are paid on delivery."));
+        EconomyNetworking.notice(player, "Accepted. The goods are in transit and you are paid on delivery.", false);
     }
 
     public static void decline(ServerPlayer player, int orderId) {
@@ -300,11 +311,11 @@ public final class WholesaleManager {
         Wholesale state = Wholesale.get(server);
         WholesaleOrder order = state.order(orderId);
         if (order == null || order.inTransit || !order.seller.equals(player.getUUID())) {
-            player.sendSystemMessage(Component.literal("No such order to decline."));
+            EconomyNetworking.notice(player, "No such order to decline.", true);
             return;
         }
         refund(server, state, order, "declined");
-        player.sendSystemMessage(Component.literal("Order declined and the buyer refunded."));
+        EconomyNetworking.notice(player, "Order declined and the buyer refunded.", false);
     }
 
     public static void cancel(ServerPlayer player, int orderId) {
@@ -315,13 +326,13 @@ public final class WholesaleManager {
         Wholesale state = Wholesale.get(server);
         WholesaleOrder order = state.order(orderId);
         if (order == null || order.inTransit || !order.buyer.equals(player.getUUID())) {
-            player.sendSystemMessage(Component.literal("No such order to cancel."));
+            EconomyNetworking.notice(player, "No such order to cancel.", true);
             return;
         }
         refund(server, state, order, "cancelled");
         tell(server, order.seller, order.buyerName + " cancelled an order for "
             + order.items() + " x " + order.stack.getHoverName().getString() + ".");
-        player.sendSystemMessage(Component.literal("Order cancelled and refunded."));
+        EconomyNetworking.notice(player, "Order cancelled and refunded.", false);
     }
 
     private static void refund(MinecraftServer server, Wholesale state, WholesaleOrder order, String reason) {
@@ -440,7 +451,7 @@ public final class WholesaleManager {
     private static void tell(MinecraftServer server, UUID who, String message) {
         ServerPlayer online = server.getPlayerList().getPlayer(who);
         if (online != null) {
-            online.sendSystemMessage(Component.literal(message));
+            EconomyNetworking.notice(online, message, false);
         }
     }
 }

@@ -2,7 +2,6 @@ package info.mudbourn.mmseconomy.block;
 
 import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -52,7 +51,7 @@ public class BankBlock extends HorizontalDirectionalBlock {
                 serverPlayer,
                 info.mudbourn.mmseconomy.MmsEconomy.config().bankRange);
             if (bank == null) {
-                serverPlayer.sendOverlayMessage(Component.literal("Stand directly in front of the bank's face to use it."));
+                EconomyNetworking.notice(serverPlayer, "Stand directly in front of the bank's face to use it.", true);
                 return InteractionResult.SUCCESS;
             }
             EconomyNetworking.openHub(serverPlayer, bank);

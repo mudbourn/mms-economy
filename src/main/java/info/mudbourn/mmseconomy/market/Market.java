@@ -84,6 +84,22 @@ public final class Market extends SavedData {
         setDirty();
     }
 
+    // Removes and returns the listings at a depot, for parking them.
+    public List<ShopListing> extractAt(String dimension, BlockPos depot) {
+        List<ShopListing> taken = listings.stream()
+            .filter(listing -> listing.depot().equals(depot) && listing.dimension().equals(dimension))
+            .toList();
+        removeIf(taken::contains);
+        return taken;
+    }
+
+    // Removes and returns a shop's custom name, or an empty string when it has none.
+    public String takeShopName(String dimension, BlockPos depot) {
+        String name = shopNames.remove(shopKey(dimension, depot));
+        setDirty();
+        return name == null ? "" : name;
+    }
+
     public void add(ShopListing listing) {
         listings.add(listing);
         setDirty();

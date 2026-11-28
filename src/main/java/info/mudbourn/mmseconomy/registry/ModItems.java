@@ -1,6 +1,8 @@
 package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
+import info.mudbourn.mmseconomy.display.DisplayItem;
+import info.mudbourn.mmseconomy.display.DisplayKind;
 import info.mudbourn.mmseconomy.economy.BondItem;
 import info.mudbourn.mmseconomy.economy.LoanDeedItem;
 import java.util.function.Function;
@@ -10,7 +12,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 
-// Registers the mod's gem currency items, casino chips, the shop book, the bond and the loan deed.
+// Registers the mod's gem currency items, casino chips, the shop book, the bond, the loan deed and the shop display items.
 public final class ModItems {
 
     public static Item PICE;
@@ -22,6 +24,10 @@ public final class ModItems {
     public static Item BOND;
 
     public static Item LOAN_DEED;
+
+    public static Item SHOP_FRAME;
+
+    public static Item SHOP_MANNEQUIN;
 
     public static Item CHIP_10;
 
@@ -37,6 +43,8 @@ public final class ModItems {
         SHOP_BOOK = register("shop_book", Item::new, new Item.Properties().stacksTo(1));
         BOND = register("bond", BondItem::new, new Item.Properties().stacksTo(1));
         LOAN_DEED = register("loan_deed", LoanDeedItem::new, new Item.Properties().stacksTo(1));
+        SHOP_FRAME = register("shop_frame", settings -> new DisplayItem(settings, DisplayKind.FRAME), new Item.Properties());
+        SHOP_MANNEQUIN = register("shop_mannequin", settings -> new DisplayItem(settings, DisplayKind.MANNEQUIN), new Item.Properties());
         CHIP_10 = register("chip_10", Item::new, new Item.Properties());
         CHIP_20 = register("chip_20", Item::new, new Item.Properties());
         CHIP_50 = register("chip_50", Item::new, new Item.Properties());

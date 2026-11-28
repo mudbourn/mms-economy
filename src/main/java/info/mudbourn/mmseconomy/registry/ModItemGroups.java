@@ -28,6 +28,9 @@ public final class ModItemGroups {
                 entries.accept(ModBlocks.COLT_BLOCK);
                 entries.accept(ModBlocks.PICE_BLOCK);
                 entries.accept(ModBlocks.BANK);
+                entries.accept(ModBlocks.DEPOT);
+                entries.accept(ModItems.SHOP_FRAME);
+                entries.accept(ModItems.SHOP_MANNEQUIN);
                 entries.accept(ModItems.SHOP_BOOK);
                 entries.accept(ModItems.BOND);
                 entries.accept(ModItems.LOAN_DEED);

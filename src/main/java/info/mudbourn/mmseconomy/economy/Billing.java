@@ -3,8 +3,8 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -102,8 +102,10 @@ public final class Billing {
 
         long owed = owedBy(state, id);
         if (owed > 0) {
-            player.sendSystemMessage(Component.literal("You owe " + Currency.format(owed)
-                + " in overdue bills, bonds and loans."));
+            EconomyNetworking.notice(
+                player,
+                "You owe " + Currency.format(owed) + " in overdue bills, bonds and loans.",
+                true);
         }
     }
 
@@ -157,14 +159,19 @@ public final class Billing {
             settlement.gross(), settlement.tax(), -settlement.gross(), payeeName + " (" + label + ")"));
         HistoryEntry received = new HistoryEntry(day, HistoryCategory.BILL, "", 0,
             settlement.gross(), settlement.tax(), settlement.net(), payerName + " (" + label + ")");
-        payer.sendSystemMessage(Component.literal("Bill " + label + ": paid " + payeeName + " "
-            + Currency.format(settlement.gross()) + " (tax " + Currency.format(settlement.tax()) + ")."));
+        EconomyNetworking.notice(
+            payer,
+            "Bill " + label + ": paid " + payeeName + " " + Currency.format(settlement.gross()) + " (tax "
+                + Currency.format(settlement.tax()) + ").",
+            false);
 
         if (online != null) {
             History.log(online, received);
-            online.sendSystemMessage(Component.literal("Bill " + label + ": received "
-                + Currency.format(settlement.net()) + " from " + payerName
-                + " (tax " + Currency.format(settlement.tax()) + ")."));
+            EconomyNetworking.notice(
+                online,
+                "Bill " + label + ": received " + Currency.format(settlement.net()) + " from " + payerName + " (tax "
+                    + Currency.format(settlement.tax()) + ").",
+                false);
         } else {
             PendingPayouts.get(server).record(payee, settlement.net(), received);
         }
@@ -177,7 +184,7 @@ public final class Billing {
         }
         ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(uuid));
         if (player != null) {
-            player.sendSystemMessage(Component.literal(message));
+            EconomyNetworking.notice(player, message, false);
         }
     }
 

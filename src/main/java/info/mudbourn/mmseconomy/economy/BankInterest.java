@@ -4,7 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.config.EconomyConfig;
-import net.minecraft.network.chat.Component;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -79,7 +79,7 @@ public final class BankInterest extends SavedData {
                 new info.mudbourn.mmseconomy.history.HistoryEntry(
                     day, info.mudbourn.mmseconomy.history.HistoryCategory.PAYMENT, "", 0,
                     interest, 0L, interest, "Bank interest"));
-            player.sendSystemMessage(Component.literal("Bank interest: +" + Currency.format(interest)));
+            EconomyNetworking.notice(player, "Bank interest: +" + Currency.format(interest), false);
         }
     }
 }

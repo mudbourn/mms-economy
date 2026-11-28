@@ -34,7 +34,6 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
@@ -608,7 +607,13 @@ public final class EconomyNetworking {
         }
     }
 
+    // Sends a message to one player, as a toast while a screen is open and as an overlay otherwise.
+    public static void notice(ServerPlayer player, String message, boolean failed) {
+        ServerPlayNetworking.send(player, new NoticePayload(message, failed));
+    }
+
     public static void register() {
+        PayloadTypeRegistry.clientboundPlay().register(NoticePayload.TYPE, NoticePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(OpenHub.ID, OpenHub.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(OpenHistory.ID, OpenHistory.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(BankAction.ID, BankAction.CODEC);
@@ -757,7 +762,7 @@ public final class EconomyNetworking {
                 return;
             }
         }
-        player.sendOverlayMessage(Component.literal("This shop has closed."));
+        EconomyNetworking.notice(player, "This shop has closed.", true);
     }
 
     // Gives the player a shop book for the first listing at the named owner's depot.
@@ -770,7 +775,7 @@ public final class EconomyNetworking {
                 return;
             }
         }
-        player.sendSystemMessage(Component.literal("That shop no longer exists."));
+        EconomyNetworking.notice(player, "That shop no longer exists.", true);
     }
 
     private static boolean atBank(ServerPlayer player) {
@@ -819,7 +824,9 @@ public final class EconomyNetworking {
         }
 
         BlockPos depot = Depot.detectNear(player, depotRange);
-        boolean nearDepot = (depot != null && !market.depotClaimedByOther(depot, player.getUUID()))
+        boolean nearDepot = (depot != null
+            && !market.depotClaimedByOther(depot, player.getUUID())
+            && !Depot.ownedByOther(world, depot, player.getUUID()))
             || Marketplace.ownsReachableDepot(player);
 
         info.mudbourn.mmseconomy.economy.ServerLibrary shelf =
@@ -934,7 +941,7 @@ public final class EconomyNetworking {
         boolean debug = info.mudbourn.mmseconomy.economy.DebugAccess.has(player);
         BlockPos bank = BankAccess.nearestBank(player, MmsEconomy.config().bankRange);
         if (!debug && (bank == null || BankOccupancy.isOccupiedByOther(bank, player))) {
-            player.sendSystemMessage(Component.literal("This bank is not available."));
+            EconomyNetworking.notice(player, "This bank is not available.", true);
             return;
         }
         long amount = action.amount();
@@ -945,31 +952,33 @@ public final class EconomyNetworking {
         boolean gamemaster = net.minecraft.commands.Commands.LEVEL_GAMEMASTERS
             .check(player.permissions()) || debug;
         if (action.chips() && (!action.deposit() || !gamemaster)) {
-            player.sendSystemMessage(Component.literal("Only admins can cash chips at the bank."));
+            EconomyNetworking.notice(player, "Only admins can cash chips at the bank.", true);
             return;
         }
 
         if (action.chips() && (!Chips.casinoLoaded() || amount % Chips.step() != 0)) {
-            player.sendSystemMessage(
-                Component.literal("Chips come in multiples of " + Currency.format(Chips.step()) + "."));
+            EconomyNetworking.notice(
+                player,
+                "Chips come in multiples of " + Currency.format(Chips.step()) + ".",
+                true);
             return;
         }
 
         if (action.chips() && action.deposit()) {
             if (!Chips.removeExact(player, amount)) {
-                player.sendSystemMessage(Component.literal("You lack chips worth exactly that amount."));
+                EconomyNetworking.notice(player, "You lack chips worth exactly that amount.", true);
                 return;
             }
             Wallet.deposit(player, amount);
         } else if (action.deposit()) {
             if (!Gems.removeExact(player, amount)) {
-                player.sendSystemMessage(Component.literal("You lack gems worth exactly that amount."));
+                EconomyNetworking.notice(player, "You lack gems worth exactly that amount.", true);
                 return;
             }
             Wallet.deposit(player, amount);
         } else {
             if (!Wallet.withdraw(player, amount)) {
-                player.sendSystemMessage(Component.literal("Your balance is too low."));
+                EconomyNetworking.notice(player, "Your balance is too low.", true);
                 return;
             }
             Gems.give(player, amount);

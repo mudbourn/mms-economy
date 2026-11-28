@@ -12,7 +12,7 @@ import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
-import net.minecraft.network.chat.Component;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import java.util.ArrayList;
@@ -34,11 +34,15 @@ public final class OfferManager {
     public static void offerBill(ServerPlayer payee, ServerPlayer payer, long amount,
                                  int intervalDays, int lateBps, String label) {
         PendingOffer offer = add(PendingOffer.Type.BILL, payee, payer, amount, 0, intervalDays, 0, lateBps, label);
-        payee.sendSystemMessage(Component.literal("Bill request " + offer.id + " sent to "
-            + payer.getName().getString() + "."));
-        payer.sendSystemMessage(Component.literal(payee.getName().getString() + " asks you to pay "
-            + Currency.format(amount) + " every " + intervalDays + " days for " + label
-            + ". Accept with /bill accept " + offer.id + "."));
+        EconomyNetworking.notice(
+            payee,
+            "Bill request " + offer.id + " sent to " + payer.getName().getString() + ".",
+            false);
+        EconomyNetworking.notice(
+            payer,
+            payee.getName().getString() + " asks you to pay " + Currency.format(amount) + " every " + intervalDays
+                + " days for " + label + ". Accept with /bill accept " + offer.id + ".",
+            false);
     }
 
     // A borrower asks a lender for a loan repaid in installments.
@@ -47,17 +51,19 @@ public final class OfferManager {
         OFFERS.values().removeIf(entry -> entry.type == PendingOffer.Type.LOAN
             && entry.target.equals(lender.getUUID()));
         add(PendingOffer.Type.LOAN, borrower, lender, principal, rateBps, periodDays, installments, lateBps, "");
-        borrower.sendSystemMessage(Component.literal("Loan request sent to " + lender.getName().getString() + "."));
-        lender.sendSystemMessage(Component.literal(borrower.getName().getString() + " asks to borrow "
-            + Currency.format(principal) + ", repaid in " + installments + " " + Loans.period(periodDays)
-            + " payments with " + BondPaper.percent(rateBps) + " interest each, late rate "
-            + BondPaper.percent(lateBps) + " per day. Accept with /loan accept."));
+        EconomyNetworking.notice(borrower, "Loan request sent to " + lender.getName().getString() + ".", false);
+        EconomyNetworking.notice(
+            lender,
+            borrower.getName().getString() + " asks to borrow " + Currency.format(principal) + ", repaid in "
+                + installments + " " + Loans.period(periodDays) + " payments with " + BondPaper.percent(rateBps)
+                + " interest each, late rate " + BondPaper.percent(lateBps) + " per day. Accept with /loan accept.",
+            false);
     }
 
     public static void acceptBill(ServerPlayer payer, int id) {
         PendingOffer offer = OFFERS.get(id);
         if (offer == null || offer.type != PendingOffer.Type.BILL || !offer.target.equals(payer.getUUID())) {
-            payer.sendSystemMessage(Component.literal("You have no bill request " + id + "."));
+            EconomyNetworking.notice(payer, "You have no bill request " + id + ".", true);
             return;
         }
 
@@ -65,9 +71,11 @@ public final class OfferManager {
         MinecraftServer server = payer.level().getServer();
         Bill bill = Billing.create(server, payer, offer.proposer, offer.proposerName, offer.amount,
             offer.days, offer.lateBps, offer.label);
-        payer.sendSystemMessage(Component.literal("Bill " + bill.id + " started: " + Currency.format(bill.amount)
-            + " to " + bill.payeeName + " every " + bill.intervalDays + " days, first due day "
-            + bill.nextDue + "."));
+        EconomyNetworking.notice(
+            payer,
+            "Bill " + bill.id + " started: " + Currency.format(bill.amount) + " to " + bill.payeeName + " every "
+                + bill.intervalDays + " days, first due day " + bill.nextDue + ".",
+            false);
         Billing.tell(server, offer.proposer.toString(), payer.getName().getString()
             + " accepted bill " + bill.id + " (" + bill.label + ").");
     }
@@ -78,7 +86,7 @@ public final class OfferManager {
             .findFirst()
             .orElse(null);
         if (offer == null) {
-            lender.sendSystemMessage(Component.literal("You have no loan request."));
+            EconomyNetworking.notice(lender, "You have no loan request.", true);
             return;
         }
 
@@ -86,16 +94,16 @@ public final class OfferManager {
         ServerPlayer borrower = server.getPlayerList().getPlayer(offer.proposer);
         if (borrower == null) {
             OFFERS.remove(offer.id);
-            lender.sendSystemMessage(Component.literal(offer.proposerName + " is no longer online."));
+            EconomyNetworking.notice(lender, offer.proposerName + " is no longer online.", true);
             return;
         }
         if (!Wallet.canAfford(lender, offer.amount)) {
-            lender.sendSystemMessage(Component.literal("You only have " + Currency.format(Wallet.balance(lender)) + "."));
+            EconomyNetworking.notice(lender, "You only have " + Currency.format(Wallet.balance(lender)) + ".", true);
             return;
         }
 
         if (!Wallet.transfer(lender, borrower, offer.amount)) {
-            lender.sendSystemMessage(Component.literal("The transfer failed. Loan cancelled."));
+            EconomyNetworking.notice(lender, "The transfer failed. Loan cancelled.", true);
             return;
         }
         OFFERS.remove(offer.id);
@@ -109,10 +117,16 @@ public final class OfferManager {
             offer.amount, 0L, -offer.amount, offer.proposerName + " loan"));
         History.log(borrower, new HistoryEntry(day, HistoryCategory.DEAL, "", 0,
             offer.amount, 0L, offer.amount, lenderName + " loan"));
-        lender.sendSystemMessage(Component.literal("Lent " + Currency.format(offer.amount) + " to " + offer.proposerName
-            + " as " + Loans.label(loan) + ": " + Loans.terms(loan) + ". You hold the deed."));
-        borrower.sendSystemMessage(Component.literal("Borrowed " + Currency.format(offer.amount) + " from "
-            + lenderName + " as " + Loans.label(loan) + ": " + Loans.terms(loan) + "."));
+        EconomyNetworking.notice(
+            lender,
+            "Lent " + Currency.format(offer.amount) + " to " + offer.proposerName + " as " + Loans.label(loan) + ": "
+                + Loans.terms(loan) + ". You hold the deed.",
+            false);
+        EconomyNetworking.notice(
+            borrower,
+            "Borrowed " + Currency.format(offer.amount) + " from " + lenderName + " as " + Loans.label(loan) + ": "
+                + Loans.terms(loan) + ".",
+            false);
     }
 
     // Expires requests that have waited past the deal timeout.

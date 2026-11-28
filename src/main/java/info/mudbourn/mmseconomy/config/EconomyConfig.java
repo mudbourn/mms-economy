@@ -60,8 +60,17 @@ public final class EconomyConfig {
     // Vertical blocks a depot may sit above or below the reaching player, so it can be hidden underground.
     public int shopVerticalRange = 5;
 
-    // Flat Pice sink charged once when a player first claims a shop depot.
+    // Flat Pice sink charged when a player acquires a new depot.
     public long shopSetupFeePice = 1500L;
+
+    // Blocks on every axis a shop display may be from its depot before it despawns.
+    public int displayDepotRange = 35;
+
+    // Pice charged for placing a shop mannequin.
+    public long displayMannequinFeePice = 300L;
+
+    // Pice charged for placing a shop product frame.
+    public long displayFrameFeePice = 50L;
 
     // Whether transaction taxes are collected at all.
     public boolean taxEnabled = true;
@@ -144,6 +153,9 @@ public final class EconomyConfig {
         "shopMarketRange",
         "shopVerticalRange",
         "shopSetupFeePice",
+        "displayDepotRange",
+        "displayMannequinFeePice",
+        "displayFrameFeePice",
         "taxEnabled",
         "taxPayBps",
         "taxDealBps",
@@ -186,6 +198,9 @@ public final class EconomyConfig {
                 case "shopMarketRange" -> this.shopMarketRange = Integer.parseInt(value);
                 case "shopVerticalRange" -> this.shopVerticalRange = Integer.parseInt(value);
                 case "shopSetupFeePice" -> this.shopSetupFeePice = Long.parseLong(value);
+                case "displayDepotRange" -> this.displayDepotRange = Integer.parseInt(value);
+                case "displayMannequinFeePice" -> this.displayMannequinFeePice = Long.parseLong(value);
+                case "displayFrameFeePice" -> this.displayFrameFeePice = Long.parseLong(value);
                 case "taxEnabled" -> this.taxEnabled = Boolean.parseBoolean(value);
                 case "taxPayBps" -> this.taxPayBps = Integer.parseInt(value);
                 case "taxDealBps" -> this.taxDealBps = Integer.parseInt(value);
@@ -238,6 +253,9 @@ public final class EconomyConfig {
             + ", shopMarketRange=" + shopMarketRange
             + ", shopVerticalRange=" + shopVerticalRange
             + ", shopSetupFeePice=" + shopSetupFeePice
+            + ", displayDepotRange=" + displayDepotRange
+            + ", displayMannequinFeePice=" + displayMannequinFeePice
+            + ", displayFrameFeePice=" + displayFrameFeePice
             + ", taxEnabled=" + taxEnabled
             + ", taxPayBps=" + taxPayBps
             + ", taxDealBps=" + taxDealBps

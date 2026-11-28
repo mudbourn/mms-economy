@@ -4,8 +4,8 @@ import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import info.mudbourn.mmseconomy.registry.ModItems;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
@@ -126,18 +126,18 @@ public final class Bonds {
         MinecraftServer server = player.level().getServer();
         String id = BondPaper.read(stack);
         if (server == null || id == null) {
-            player.sendSystemMessage(Component.literal("This paper is blank; buy bonds with /bond buy."));
+            EconomyNetworking.notice(player, "This paper is blank; buy bonds with /bond buy.", true);
             return;
         }
 
         Obligations state = Obligations.get(server);
         Bond bond = state.bond(id);
         if (bond == null) {
-            player.sendSystemMessage(Component.literal("This bond is not recognised or is already closed."));
+            EconomyNetworking.notice(player, "This bond is not recognised or is already closed.", true);
             return;
         }
         if (!bond.vault.isEmpty()) {
-            player.sendSystemMessage(Component.literal("This bond is held in a bank vault and this paper is void."));
+            EconomyNetworking.notice(player, "This bond is held in a bank vault and this paper is void.", true);
             return;
         }
 
@@ -147,7 +147,7 @@ public final class Bonds {
             bond.required = remainingTicks(server, bond);
             stack.shrink(1);
             state.setDirty();
-            player.sendSystemMessage(Component.literal("Bond stored in your bank. Payments now go to your wallet."));
+            EconomyNetworking.notice(player, "Bond stored in your bank. Payments now go to your wallet.", false);
             settleVaulted(player, state, bond);
             return;
         }
@@ -159,7 +159,7 @@ public final class Bonds {
     // Stores every bond paper the player carries in their bank vault, at a bank.
     public static void vaultCarried(ServerPlayer player) {
         if (!BankAccess.inReach(player)) {
-            player.sendSystemMessage(Component.literal("Stand at a bank to vault bonds."));
+            EconomyNetworking.notice(player, "Stand at a bank to vault bonds.", true);
             return;
         }
         boolean found = false;
@@ -172,7 +172,7 @@ public final class Bonds {
             }
         }
         if (!found) {
-            player.sendSystemMessage(Component.literal("You carry no bond papers."));
+            EconomyNetworking.notice(player, "You carry no bond papers.", true);
         }
     }
 
@@ -204,20 +204,20 @@ public final class Bonds {
             return;
         }
         if (!BankAccess.inReach(player)) {
-            player.sendSystemMessage(Component.literal("Stand at a bank to take bonds out of your vault."));
+            EconomyNetworking.notice(player, "Stand at a bank to take bonds out of your vault.", true);
             return;
         }
         Obligations state = Obligations.get(server);
         List<Bond> held = vaulted(state, player);
         if (index < 1 || index > held.size()) {
-            player.sendSystemMessage(Component.literal("No such bond in your vault."));
+            EconomyNetworking.notice(player, "No such bond in your vault.", true);
             return;
         }
         Bond bond = held.get(index - 1);
         bond.vault = "";
         state.setDirty();
         give(player, bond);
-        player.sendSystemMessage(Component.literal("Took the " + bond.issuerName + " bond out of your vault."));
+        EconomyNetworking.notice(player, "Took the " + bond.issuerName + " bond out of your vault.", false);
     }
 
     // A one-line summary of a bond for vault listings.
@@ -255,23 +255,27 @@ public final class Bonds {
             Wallet.deposit(player, net);
             History.log(player, new HistoryEntry(History.currentDay(player), HistoryCategory.DEAL, "", 0,
                 interest + principal, tax, net, bond.issuerName + " bond"));
-            player.sendSystemMessage(Component.literal("Bond redeemed: received " + Currency.format(net)
-                + " (interest " + Currency.format(interest) + ", tax " + Currency.format(tax)
-                + ", principal " + Currency.format(principal) + ")."));
+            EconomyNetworking.notice(
+                player,
+                "Bond redeemed: received " + Currency.format(net) + " (interest " + Currency.format(interest)
+                    + ", tax " + Currency.format(tax) + ", principal " + Currency.format(principal) + ").",
+                false);
         }
         if (bond.accrued() > 0 && headroom < Long.MAX_VALUE) {
-            player.sendSystemMessage(Component.literal("Your wallet is full; the rest stays on the bond."));
+            EconomyNetworking.notice(player, "Your wallet is full; the rest stays on the bond.", false);
         }
 
         state.setDirty();
         if (closable(state, bond)) {
             state.bonds.remove(bond);
-            player.sendSystemMessage(Component.literal("The " + bond.issuerName
-                + " bond has matured and is fully repaid. It is now closed."));
+            EconomyNetworking.notice(
+                player,
+                "The " + bond.issuerName + " bond has matured and is fully repaid. It is now closed.",
+                false);
             return true;
         }
         if (bond.vault.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Bond status: " + status(server, state, bond)));
+            EconomyNetworking.notice(player, "Bond status: " + status(server, state, bond), false);
         }
         return false;
     }

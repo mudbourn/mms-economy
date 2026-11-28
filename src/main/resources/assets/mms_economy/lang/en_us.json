@@ -2,11 +2,16 @@
   "key.category.mms.main": "MMS",
   "itemGroup.mms_economy.economy": "MMS Economy",
 
+  "gui.mms_economy.notice_done": "Economy",
+  "gui.mms_economy.notice_failed": "Economy",
+
   "item.mms_economy.pice": "Pice",
   "item.mms_economy.colt": "Colt",
   "item.mms_economy.shop_book": "Shop Book",
   "item.mms_economy.bond": "Bond",
   "item.mms_economy.loan_deed": "Loan Deed",
+  "item.mms_economy.shop_frame": "Shop Frame",
+  "item.mms_economy.shop_mannequin": "Shop Mannequin",
   "item.mms_economy.chip_10": "10 Colt Chip",
   "item.mms_economy.chip_20": "20 Colt Chip",
   "item.mms_economy.chip_50": "50 Colt Chip",
@@ -15,6 +20,10 @@
   "block.mms_economy.pice_block": "Block of Pice",
   "block.mms_economy.colt_block": "Block of Colt",
   "block.mms_economy.bank_block": "Bank",
+  "block.mms_economy.depot": "Depot",
+
+  "entity.mms_economy.shop_frame": "Shop Frame",
+  "entity.mms_economy.shop_mannequin": "Shop Mannequin",
 
   "subtitles.mms_economy.bank_open": "Bank opens",
   "subtitles.mms_economy.bank_close": "Bank closes",

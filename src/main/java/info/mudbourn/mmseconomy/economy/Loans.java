@@ -5,7 +5,7 @@ import info.mudbourn.mmseconomy.config.EconomyConfig;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
-import net.minecraft.network.chat.Component;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -70,34 +70,36 @@ public final class Loans {
         MinecraftServer server = player.level().getServer();
         EconomyConfig config = MmsEconomy.config();
         if (server == null || !config.bankLoansEnabled) {
-            player.sendSystemMessage(Component.literal("The bank is not lending."));
+            EconomyNetworking.notice(player, "The bank is not lending.", true);
             return;
         }
         if (!BankAccess.inReach(player)) {
-            player.sendSystemMessage(Component.literal("Stand at a bank to borrow from it."));
+            EconomyNetworking.notice(player, "Stand at a bank to borrow from it.", true);
             return;
         }
         int maxInstallments = Math.max(1, Math.min(config.bankLoanMaxInstallments, MAX_INSTALLMENTS));
         if (installments < 1 || installments > maxInstallments) {
-            player.sendSystemMessage(Component.literal("The bank lends over 1 to " + maxInstallments
-                + " installments."));
+            EconomyNetworking.notice(player, "The bank lends over 1 to " + maxInstallments + " installments.", true);
             return;
         }
 
         Obligations state = Obligations.get(server);
         String id = player.getUUID().toString();
         if (Billing.owedBy(state, id) > 0) {
-            player.sendSystemMessage(Component.literal("Clear your overdue debts before borrowing from the bank."));
+            EconomyNetworking.notice(player, "Clear your overdue debts before borrowing from the bank.", true);
             return;
         }
         long room = Math.max(0L, bankLimit(player) - bankPrincipal(state, id));
         if (amount > room) {
-            player.sendSystemMessage(Component.literal("The bank will lend you at most " + Currency.format(room)
-                + " more." + (goodStanding(player) ? "" : " " + standingRule())));
+            EconomyNetworking.notice(
+                player,
+                "The bank will lend you at most " + Currency.format(room) + " more."
+                    + (goodStanding(player) ? "" : " " + standingRule()),
+                true);
             return;
         }
         if (!Treasury.get(server).debit(amount)) {
-            player.sendSystemMessage(Component.literal("The bank cannot cover that loan right now."));
+            EconomyNetworking.notice(player, "The bank cannot cover that loan right now.", true);
             return;
         }
 
@@ -106,8 +108,10 @@ public final class Loans {
             config.bankLoanPeriodDays, installments, config.bankLoanLateBps);
         History.log(player, new HistoryEntry(History.currentDay(player), HistoryCategory.DEAL, "", 0,
             amount, 0L, amount, BANK_LOAN));
-        player.sendSystemMessage(Component.literal("Borrowed " + Currency.format(amount) + " from the bank: "
-            + terms(loan) + "."));
+        EconomyNetworking.notice(
+            player,
+            "Borrowed " + Currency.format(amount) + " from the bank: " + terms(loan) + ".",
+            false);
     }
 
     // Every ten seconds, charges online borrowers whose active playtime filled a period and grows their loan debts.
@@ -156,8 +160,10 @@ public final class Loans {
         long paid = principal
             + pay(server, payer, debt.payee, debt.payeeName, want - principal, true, debt.label);
         if (paid > 0) {
-            payer.sendSystemMessage(Component.literal("Collected " + Currency.format(paid) + " of overdue "
-                + debt.label + "."));
+            EconomyNetworking.notice(
+                payer,
+                "Collected " + Currency.format(paid) + " of overdue " + debt.label + ".",
+                false);
             Billing.tell(server, debt.payee, debt.payerName + " paid " + Currency.format(paid)
                 + " of overdue " + debt.label + ".");
         }
@@ -173,13 +179,16 @@ public final class Loans {
         Obligations state = Obligations.get(server);
         Loan loan = state.loan(id);
         if (loan == null || !loan.borrower.equals(player.getUUID().toString())) {
-            player.sendSystemMessage(Component.literal("You have no loan " + id + " to pay off."));
+            EconomyNetworking.notice(player, "You have no loan " + id + " to pay off.", true);
             return;
         }
         long due = loan.payoff();
         if (!Wallet.canAfford(player, due)) {
-            player.sendSystemMessage(Component.literal("Paying off " + label(loan) + " costs " + Currency.format(due)
-                + "; you only have " + Currency.format(Wallet.balance(player)) + "."));
+            EconomyNetworking.notice(
+                player,
+                "Paying off " + label(loan) + " costs " + Currency.format(due) + "; you only have "
+                    + Currency.format(Wallet.balance(player)) + ".",
+                true);
             return;
         }
 
@@ -190,7 +199,7 @@ public final class Loans {
         loan.paymentsLeft = 0;
         state.loans.remove(loan);
         state.setDirty();
-        player.sendSystemMessage(Component.literal("Paid off " + label + " for " + Currency.format(due) + "."));
+        EconomyNetworking.notice(player, "Paid off " + label + " for " + Currency.format(due) + ".", false);
         Billing.tell(server, loan.lender, loan.borrowerName + " paid off " + label + " early for "
             + Currency.format(due) + ".");
     }
@@ -223,15 +232,15 @@ public final class Loans {
         MinecraftServer server = player.level().getServer();
         int id = LoanDeed.read(stack);
         if (server == null || id < 0) {
-            player.sendSystemMessage(Component.literal("This deed is blank; lend with /loan accept."));
+            EconomyNetworking.notice(player, "This deed is blank; lend with /loan accept.", true);
             return;
         }
         Loan loan = Obligations.get(server).loan(id);
         if (loan == null) {
-            player.sendSystemMessage(Component.literal("This loan is settled and the deed is void."));
+            EconomyNetworking.notice(player, "This loan is settled and the deed is void.", true);
             return;
         }
-        player.sendSystemMessage(Component.literal(describe(server, loan, player.getUUID().toString()) + "."));
+        EconomyNetworking.notice(player, describe(server, loan, player.getUUID().toString()) + ".", false);
     }
 
     // The most bank loan principal the player may owe at once.

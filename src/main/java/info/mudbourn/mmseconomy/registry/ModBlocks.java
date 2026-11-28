@@ -2,6 +2,7 @@ package info.mudbourn.mmseconomy.registry;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
 import info.mudbourn.mmseconomy.block.BankBlock;
+import info.mudbourn.mmseconomy.block.DepotBlock;
 import java.util.function.Function;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -22,6 +23,8 @@ public final class ModBlocks {
 
     public static Block BANK;
 
+    public static Block DEPOT;
+
     // Currency block stack cap, matching the stack mod the live server runs.
     private static final int CURRENCY_STACK = 99;
 
@@ -32,6 +35,8 @@ public final class ModBlocks {
             BlockBehaviour.Properties.ofFullCopy(Blocks.GOLD_BLOCK), CURRENCY_STACK);
         BANK = register("bank_block", BankBlock::new,
             BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(-1.0f, 3600000.0f), 64);
+        DEPOT = register("depot", DepotBlock::new,
+            BlockBehaviour.Properties.ofFullCopy(Blocks.BARREL).strength(2.5f, 3600000.0f), 1);
     }
 
     private static Block register(String name, Function<BlockBehaviour.Properties, Block> factory,

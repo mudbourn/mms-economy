@@ -3,7 +3,7 @@
 A standalone Fabric mod for Minecraft 26.3 (Java 25) that adds a two-tier gem
 currency to MMSLive01: a virtual per-player wallet, physical Pice and Colt gems,
 a bank, transaction taxes into a server treasury, player-to-player payments and
-wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.
+wholesale deals, a depot-backed marketplace, and a transaction-history ledger.
 
 ## Currency
 
@@ -12,6 +12,22 @@ wholesale deals, a barrel-backed marketplace, and a transaction-history ledger.
 - Denomination: 100 Pice make 1 Colt (configurable). Colt is the headline unit.
 - Physical gems: `pice` (worth 1) and `colt` (worth 100), plus their storage
   blocks, are deposit and withdraw tokens, not the currency itself.
+
+## Shops
+
+- Depot: a 2x2 wall of four barrels placed as one block. Placing a new depot
+  costs 15 Colt (`shopSetupFeePice`) into the Treasury. Each of the four
+  barrels opens its own 27-slot chest, and only the owner can open or break it.
+  Listings need one of your own depots.
+- Breaking a depot hides its shop. The dropped depot item carries the shop's
+  id, and placing it again restores the listings, shop name and stock at the
+  new spot. A depot item that is destroyed passes its shop to your next new
+  depot.
+- Shop frame and shop mannequin: decorations placed within 35 blocks of your
+  depot for 50 Pice and 3 Colt. Frames show an item. Mannequins take armor,
+  a weapon in the left hand and any item in the right hand, by the body part you
+  click. Only the owner can use or break them. When the depot is broken or out
+  of range they return their items to you and give a free placement.
 
 ## Commands
 

@@ -3,7 +3,7 @@ package info.mudbourn.mmseconomy.economy;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
-import net.minecraft.network.chat.Component;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import java.util.List;
@@ -64,15 +64,15 @@ public final class BondMarket {
         Obligations state = Obligations.get(server);
         BondOffering offering = state.offering(id);
         if (offering == null) {
-            player.sendSystemMessage(Component.literal("No bond offering " + id + "."));
+            EconomyNetworking.notice(player, "No bond offering " + id + ".", true);
             return;
         }
         if (offering.issuer.equals(player.getUUID().toString())) {
-            player.sendSystemMessage(Component.literal("You cannot invest in your own bond."));
+            EconomyNetworking.notice(player, "You cannot invest in your own bond.", true);
             return;
         }
         if (!Wallet.withdraw(player, offering.principal)) {
-            player.sendSystemMessage(Component.literal("You only have " + Currency.format(Wallet.balance(player)) + "."));
+            EconomyNetworking.notice(player, "You only have " + Currency.format(Wallet.balance(player)) + ".", true);
             return;
         }
 
@@ -91,8 +91,11 @@ public final class BondMarket {
 
         History.log(player, new HistoryEntry(day, HistoryCategory.DEAL, "", 0,
             offering.principal, 0L, -offering.principal, label));
-        player.sendSystemMessage(Component.literal("Invested " + Currency.format(offering.principal) + " in a "
-            + label + "; it matures on day " + bond.maturityDay + "."));
+        EconomyNetworking.notice(
+            player,
+            "Invested " + Currency.format(offering.principal) + " in a " + label + "; it matures on day "
+                + bond.maturityDay + ".",
+            false);
     }
 
     // Credits a sold bond's principal to the Treasury or the issuing player, escrowed when they are offline.
@@ -110,7 +113,9 @@ public final class BondMarket {
         }
         Wallet.deposit(online, offering.principal);
         History.log(online, received);
-        online.sendSystemMessage(Component.literal(received.counterparty() + " for "
-            + Currency.format(offering.principal) + "."));
+        EconomyNetworking.notice(
+            online,
+            received.counterparty() + " for " + Currency.format(offering.principal) + ".",
+            false);
     }
 }

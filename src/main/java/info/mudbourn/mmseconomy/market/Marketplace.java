@@ -1,6 +1,8 @@
 package info.mudbourn.mmseconomy.market;
 
 import info.mudbourn.mmseconomy.MmsEconomy;
+import info.mudbourn.mmseconomy.block.DepotBlock;
+import info.mudbourn.mmseconomy.block.DepotBlockEntity;
 import info.mudbourn.mmseconomy.economy.Currency;
 import info.mudbourn.mmseconomy.economy.DebugAccess;
 import info.mudbourn.mmseconomy.economy.Gems;
@@ -11,6 +13,7 @@ import info.mudbourn.mmseconomy.economy.Wallet;
 import info.mudbourn.mmseconomy.history.History;
 import info.mudbourn.mmseconomy.history.HistoryCategory;
 import info.mudbourn.mmseconomy.history.HistoryEntry;
+import info.mudbourn.mmseconomy.network.EconomyNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -23,6 +26,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.List;
 
 // Server-authoritative shop and market operations, all validated live.
@@ -31,56 +35,42 @@ public final class Marketplace {
     private Marketplace() {
     }
 
-    // Blocks the player may be from the barrel wall they look at to claim it as a shop.
+    // Blocks the player may be from the depot they look at to list there.
     private static final double SHOP_REACH = 5.0;
 
     // Longest shop name an owner may set.
     public static final int MAX_SHOP_NAME = 32;
 
-    // Lists the held item at a unit price at the chosen own shop, or else the looked-at depot, charging the setup fee on a first claim.
+    // Lists the held item at a unit price at the chosen own depot, or else the depot looked at.
     public static void list(ServerPlayer player, long price, BlockPos chosen) {
         if (!MmsEconomy.config().marketEnabled) {
-            player.sendSystemMessage(Component.literal("The market is disabled."));
+            EconomyNetworking.notice(player, "The market is disabled.", true);
             return;
         }
         if (price <= 0) {
-            player.sendSystemMessage(Component.literal("Set a positive price."));
+            EconomyNetworking.notice(player, "Set a positive price.", true);
             return;
         }
 
         ServerLevel world = player.level();
         Market market = Market.get(world.getServer());
-        BlockPos depot = ownedReachableDepot(player, market, chosen)
+        BlockPos depot = ownedReachableDepot(player, chosen)
             ? chosen
             : Depot.lookedAtDepot(player, SHOP_REACH);
-        if (depot == null) {
-            if (!DebugAccess.has(player)) {
-                player.sendSystemMessage(Component.literal(
-                    "Stand in front of and look directly at the 2x2 barrel wall you want as your shop."));
-                return;
-            }
-            depot = player.blockPosition();
+        if (depot == null || !Depot.isCustom(world, depot)) {
+            EconomyNetworking.notice(player, "Stand in front of and look directly at your depot to list there.", true);
+            return;
         }
 
-        if (market.depotClaimedByOther(depot, player.getUUID())) {
-            player.sendSystemMessage(Component.literal("That depot belongs to someone else."));
+        if (Depot.ownedByOther(world, depot, player.getUUID())) {
+            EconomyNetworking.notice(player, "That depot belongs to someone else.", true);
             return;
         }
 
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Hold the item you want to list."));
+            EconomyNetworking.notice(player, "Hold the item you want to list.", true);
             return;
-        }
-
-        if (!market.ownsAnyAt(depot, player.getUUID())) {
-            long fee = MmsEconomy.config().shopSetupFeePice;
-            if (!Wallet.withdraw(player, fee)) {
-                player.sendSystemMessage(Component.literal("You need " + Currency.format(fee)
-                    + " to open a shop here."));
-                return;
-            }
-            Treasury.get(world.getServer()).credit(fee);
         }
 
         String itemId = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
@@ -92,23 +82,20 @@ public final class Marketplace {
             itemId,
             price,
             held.copyWithCount(1)));
-        player.sendSystemMessage(Component.literal("Listed " + held.getHoverName().getString()
-            + " at " + Currency.format(price) + " each."));
+        EconomyNetworking.notice(
+            player,
+            "Listed " + held.getHoverName().getString() + " at " + Currency.format(price) + " each.",
+            false);
     }
 
-    // True when the chosen depot already holds one of the player's listings in this dimension and is within shop reach.
-    private static boolean ownedReachableDepot(ServerPlayer player, Market market, BlockPos chosen) {
-        if (chosen == null || !market.ownsAnyAt(chosen, player.getUUID())) {
+    // True when the chosen position is a depot of the player in this dimension within shop reach.
+    private static boolean ownedReachableDepot(ServerPlayer player, BlockPos chosen) {
+        if (chosen == null) {
             return false;
         }
         ServerLevel world = player.level();
-        String dimension = world.dimension().identifier().toString();
-        boolean sameDimension = market.all().stream().anyMatch(listing ->
-            listing.depot().equals(chosen)
-                && listing.owner().equals(player.getUUID())
-                && listing.dimension().equals(dimension));
-        return sameDimension
-            && Depot.isValid(world, chosen)
+        return world.getBlockEntity(chosen) instanceof DepotBlockEntity depot
+            && player.getUUID().equals(depot.owner())
             && (DebugAccess.has(player) || Depot.withinReach(player, chosen,
                 MmsEconomy.config().shopMarketRange, MmsEconomy.config().shopVerticalRange));
     }
@@ -123,31 +110,32 @@ public final class Marketplace {
         for (ShopListing listing : market.all()) {
             if (listing.depot().equals(depot) && listing.owner().equals(player.getUUID())) {
                 market.renameShop(listing.dimension(), depot, trimmed);
-                player.sendSystemMessage(Component.literal(trimmed.isEmpty()
-                    ? "Shop name cleared."
-                    : "Shop renamed to " + trimmed + "."));
+                EconomyNetworking.notice(
+                    player,
+                    trimmed.isEmpty() ? "Shop name cleared." : "Shop renamed to " + trimmed + ".",
+                    false);
                 return;
             }
         }
-        player.sendSystemMessage(Component.literal("That is not your shop."));
+        EconomyNetworking.notice(player, "That is not your shop.", true);
     }
 
     public static void unlist(ServerPlayer player, int index) {
         Market market = Market.get(player.level().getServer());
         List<ShopListing> all = market.all();
         if (index < 0 || index >= all.size() || !all.get(index).owner().equals(player.getUUID())) {
-            player.sendSystemMessage(Component.literal("That is not your listing."));
+            EconomyNetworking.notice(player, "That is not your listing.", true);
             return;
         }
         market.removeAt(index);
-        player.sendSystemMessage(Component.literal("Listing removed."));
+        EconomyNetworking.notice(player, "Listing removed.", false);
     }
 
     public static void browse(ServerPlayer player) {
         Market market = Market.get(player.level().getServer());
         List<ShopListing> all = market.all();
         if (all.isEmpty()) {
-            player.sendSystemMessage(Component.literal("No listings yet."));
+            EconomyNetworking.notice(player, "No listings yet.", false);
             return;
         }
         for (int i = 0; i < all.size(); i++) {
@@ -164,16 +152,19 @@ public final class Marketplace {
         Market market = Market.get(server);
         List<ShopListing> all = market.all();
         if (index < 0 || index >= all.size()) {
-            buyer.sendSystemMessage(Component.literal("No such listing."));
+            EconomyNetworking.notice(buyer, "No such listing.", true);
             return;
         }
 
         ShopListing listing = all.get(index);
         boolean debug = DebugAccess.has(buyer);
         if (!debug && !canReach(buyer, listing, server)) {
-            buyer.sendSystemMessage(Component.literal("Get within " + MmsEconomy.config().shopOwnerRange
-                + " blocks of the owner or " + MmsEconomy.config().shopMarketRange
-                + " blocks of the depot at " + listing.depot().toShortString() + " to buy this."));
+            EconomyNetworking.notice(
+                buyer,
+                "Get within " + MmsEconomy.config().shopOwnerRange + " blocks of the owner or "
+                    + MmsEconomy.config().shopMarketRange + " blocks of the depot at "
+                    + listing.depot().toShortString() + " to buy this.",
+                true);
             return;
         }
 
@@ -182,13 +173,15 @@ public final class Marketplace {
         ItemStack template = listing.template();
         List<Container> barrels = Depot.barrels(world, listing.depot());
         if (template.isEmpty() || barrels.isEmpty() || stock(barrels, listing) == 0) {
-            buyer.sendSystemMessage(Component.literal("Out of stock."));
+            EconomyNetworking.notice(buyer, "Out of stock.", true);
             return;
         }
         long tendered = Gems.tender(buyer, listing.price());
         if (tendered < 0) {
-            buyer.sendSystemMessage(Component.literal("Shops take cash only: carry "
-                + Currency.format(listing.price()) + " in Colt and Pice gems."));
+            EconomyNetworking.notice(
+                buyer,
+                "Shops take cash only: carry " + Currency.format(listing.price()) + " in Colt and Pice gems.",
+                true);
             return;
         }
         long change = tendered - listing.price();
@@ -224,9 +217,12 @@ public final class Marketplace {
                 .record(listing.owner(), unbanked, ownerEntry);
         }
 
-        buyer.sendSystemMessage(Component.literal("Bought " + name + " for " + Currency.format(settlement.gross())
-            + " (tax " + Currency.format(settlement.tax()) + ")"
-            + (change > 0 ? ", change " + Currency.format(change) : "") + "."));
+        EconomyNetworking.notice(
+            buyer,
+            "Bought " + name + " for " + Currency.format(settlement.gross()) + " (tax "
+                + Currency.format(settlement.tax()) + ")" + (change > 0 ? ", change " + Currency.format(change) : "")
+                + ".",
+            false);
     }
 
     // A buyer may reach a listing within shopOwnerRange of its online owner, or within shopMarketRange
@@ -288,26 +284,27 @@ public final class Marketplace {
         if (depot == null) {
             return false;
         }
-        return !Market.get(player.level().getServer()).depotClaimedByOther(depot, player.getUUID());
+        return !Market.get(player.level().getServer()).depotClaimedByOther(depot, player.getUUID())
+            && !Depot.ownedByOther(player.level(), depot, player.getUUID());
     }
 
     // Sells the held item to the server at buy-list prices, minting the payout, and requires standing at the player's own shop depot.
     public static void serverSell(ServerPlayer player, int count) {
         if (!DebugAccess.has(player) && !atOwnDepot(player)) {
-            player.sendSystemMessage(Component.literal("Stand at your own shop depot to sell to the server."));
+            EconomyNetworking.notice(player, "Stand at your own shop depot to sell to the server.", true);
             return;
         }
 
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Hold the item you want to sell."));
+            EconomyNetworking.notice(player, "Hold the item you want to sell.", true);
             return;
         }
 
         String itemId = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
         long unit = ServerBuyList.priceOf(itemId);
         if (unit <= 0) {
-            player.sendSystemMessage(Component.literal("The server does not buy that."));
+            EconomyNetworking.notice(player, "The server does not buy that.", true);
             return;
         }
 
@@ -321,23 +318,23 @@ public final class Marketplace {
         long payout = ServerBuyList.sellTotal(itemId, library.count(itemId), sold);
         library.store(itemId, sold);
         Wallet.deposit(player, payout);
-        player.sendSystemMessage(Component.literal("Sold " + sold + " for " + Currency.format(payout) + "."));
+        EconomyNetworking.notice(player, "Sold " + sold + " for " + Currency.format(payout) + ".", false);
     }
 
     // Buys count of a catalog item from the server, drawing from library stock first and minting the rest.
     public static void serverBuy(ServerPlayer player, String itemId, int count) {
         if (!DebugAccess.has(player) && !atOwnDepot(player)) {
-            player.sendSystemMessage(Component.literal("Stand at your own shop depot to trade with the server."));
+            EconomyNetworking.notice(player, "Stand at your own shop depot to trade with the server.", true);
             return;
         }
         if (count <= 0 || !ServerBuyList.sells(itemId)) {
-            player.sendSystemMessage(Component.literal("The server does not stock that."));
+            EconomyNetworking.notice(player, "The server does not stock that.", true);
             return;
         }
         Item item = itemOf(itemId);
         long sell = ServerBuyList.priceOf(itemId);
         if (item == null || sell <= 0) {
-            player.sendSystemMessage(Component.literal("The server does not stock that."));
+            EconomyNetworking.notice(player, "The server does not stock that.", true);
             return;
         }
 
@@ -353,7 +350,7 @@ public final class Marketplace {
         int bought = (int) (fromStock + minted);
         long spent = fromStock * stockPrice + minted * mintPrice;
         if (bought == 0 || !Wallet.withdraw(player, spent)) {
-            player.sendSystemMessage(Component.literal("You cannot afford that."));
+            EconomyNetworking.notice(player, "You cannot afford that.", true);
             return;
         }
         library.take(itemId, fromStock);
@@ -364,19 +361,21 @@ public final class Marketplace {
         long day = History.currentDay(player);
         History.log(player, new HistoryEntry(day, HistoryCategory.PURCHASE, name, bought,
             spent, 0L, -spent, "Server"));
-        player.sendSystemMessage(Component.literal("Bought " + bought + " " + name
-            + " for " + Currency.format(spent) + "."));
+        EconomyNetworking.notice(
+            player,
+            "Bought " + bought + " " + name + " for " + Currency.format(spent) + ".",
+            false);
     }
 
     // Sells count of a specific item from the player's inventory to the server at the buy-list price.
     public static void serverSellItem(ServerPlayer player, String itemId, int count) {
         if (!DebugAccess.has(player) && !atOwnDepot(player)) {
-            player.sendSystemMessage(Component.literal("Stand at your own shop depot to sell to the server."));
+            EconomyNetworking.notice(player, "Stand at your own shop depot to sell to the server.", true);
             return;
         }
         long unit = ServerBuyList.priceOf(itemId);
         if (unit <= 0) {
-            player.sendSystemMessage(Component.literal("The server does not buy that."));
+            EconomyNetworking.notice(player, "The server does not buy that.", true);
             return;
         }
         Item item = itemOf(itemId);
@@ -386,7 +385,7 @@ public final class Marketplace {
 
         int removed = removeItems(player, item, count);
         if (removed <= 0) {
-            player.sendSystemMessage(Component.literal("You have none of that to sell."));
+            EconomyNetworking.notice(player, "You have none of that to sell.", true);
             return;
         }
         info.mudbourn.mmseconomy.economy.ServerLibrary library =
@@ -394,8 +393,11 @@ public final class Marketplace {
         long payout = ServerBuyList.sellTotal(itemId, library.count(itemId), removed);
         library.store(itemId, removed);
         Wallet.deposit(player, payout);
-        player.sendSystemMessage(Component.literal("Sold " + removed + " " + item.getName(item.getDefaultInstance()).getString()
-            + " for " + Currency.format(payout) + "."));
+        EconomyNetworking.notice(
+            player,
+            "Sold " + removed + " " + item.getName(item.getDefaultInstance()).getString() + " for "
+                + Currency.format(payout) + ".",
+            false);
     }
 
     // Removes up to count of an item across the player's inventory, returning how many were taken.
@@ -414,12 +416,17 @@ public final class Marketplace {
         return count - remaining;
     }
 
-    // The owner name of a claimed depot this barrel belongs to when the player may not open it, else null.
+    // The owner name of a claimed depot this block belongs to when the player may not open it, else null.
     public static String protectedOwner(ServerPlayer player, BlockPos pos) {
         if (player.canUseGameMasterBlocks()) {
             return null;
         }
         ServerLevel world = player.level();
+        BlockState state = world.getBlockState(pos);
+        if (state.getBlock() instanceof DepotBlock
+            && world.getBlockEntity(DepotBlock.mainPos(pos, state)) instanceof DepotBlockEntity depot) {
+            return DepotShops.mayAccess(player, depot) ? null : depot.ownerName();
+        }
         String dimension = world.dimension().identifier().toString();
         for (ShopListing listing : Market.get(world.getServer()).all()) {
             if (!listing.dimension().equals(dimension)) {

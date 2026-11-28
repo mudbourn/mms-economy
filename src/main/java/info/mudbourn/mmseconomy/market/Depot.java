@@ -1,9 +1,12 @@
 package info.mudbourn.mmseconomy.market;
 
+import info.mudbourn.mmseconomy.block.DepotBlock;
+import info.mudbourn.mmseconomy.block.DepotBlockEntity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
@@ -13,11 +16,12 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
-// A resource depot: four vanilla barrels forming a 2x2 coplanar wall, keyed by the minimum-corner anchor.
+// A resource depot: a placed depot block or four vanilla barrels forming a 2x2 coplanar wall, keyed by its anchor.
 public final class Depot {
 
     private Depot() {
@@ -50,7 +54,8 @@ public final class Depot {
                     continue;
                 }
                 for (BlockEntity entity : chunk.getBlockEntities().values()) {
-                    if (!(entity instanceof BarrelBlockEntity)) {
+                    boolean custom = entity instanceof DepotBlockEntity;
+                    if (!custom && !(entity instanceof BarrelBlockEntity)) {
                         continue;
                     }
                     BlockPos anchor = entity.getBlockPos();
@@ -58,7 +63,9 @@ public final class Depot {
                         anchor.getX() + 0.5,
                         anchor.getY() + 0.5,
                         anchor.getZ() + 0.5);
-                    if (distance > limit || distance >= bestDistance || completePlane(world, anchor) == null) {
+                    if (distance > limit
+                        || distance >= bestDistance
+                        || (!custom && completePlane(world, anchor) == null)) {
                         continue;
                     }
                     best = anchor.immutable();
@@ -79,9 +86,13 @@ public final class Depot {
         return anchorContaining(player.level(), ((BlockHitResult) hit).getBlockPos());
     }
 
-    // The min-corner anchor of the complete 2x2 depot that includes this barrel, or null.
+    // The anchor of the depot that includes this block, or null.
     @Nullable
     private static BlockPos anchorContaining(ServerLevel world, BlockPos barrel) {
+        BlockState state = world.getBlockState(barrel);
+        if (state.getBlock() instanceof DepotBlock) {
+            return DepotBlock.mainPos(barrel, state);
+        }
         if (!(world.getBlockEntity(barrel) instanceof BarrelBlockEntity)) {
             return null;
         }
@@ -126,8 +137,21 @@ public final class Depot {
             && dy <= verticalRange + 0.5;
     }
 
-    // The four barrel inventories of the depot anchored at the given corner, or an empty list when incomplete.
+    // True when the anchor is a placed depot block.
+    public static boolean isCustom(ServerLevel world, BlockPos anchor) {
+        return world.getBlockEntity(anchor) instanceof DepotBlockEntity;
+    }
+
+    // True when the anchor is a placed depot block that someone other than the player owns.
+    public static boolean ownedByOther(ServerLevel world, BlockPos anchor, UUID who) {
+        return world.getBlockEntity(anchor) instanceof DepotBlockEntity depot && !who.equals(depot.owner());
+    }
+
+    // The four inventories of the depot anchored here, or an empty list when it is not a complete depot.
     public static List<Container> barrels(ServerLevel world, BlockPos anchor) {
+        if (world.getBlockEntity(anchor) instanceof DepotBlockEntity depot) {
+            return depot.containers();
+        }
         BlockPos[] positions = completePlane(world, anchor);
         if (positions == null) {
             return List.of();
@@ -197,8 +221,11 @@ public final class Depot {
         return count - left;
     }
 
-    // True when the block at pos is one of the four barrels of the depot anchored here.
+    // True when the block at pos is one of the four blocks of the depot anchored here.
     public static boolean contains(ServerLevel world, BlockPos anchor, BlockPos pos) {
+        if (world.getBlockEntity(anchor) instanceof DepotBlockEntity) {
+            return DepotBlock.isPartOf(world, anchor, pos);
+        }
         if (!withinFootprint(anchor, pos)) {
             return false;
         }
